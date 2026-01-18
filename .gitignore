@@ -40,13 +40,15 @@ venv.bak/
 
 # Project specific
 .cache/
+.cache_test/
 *.log
 config.local.yaml
+tests/__pycache__/
 
 # Environment variables
 .env
 .env.local
 
-# Test files
-test_*.py
-*_test.py
+# Test files (but keep tests/ directory)
+# test_*.py  # 注释掉，保留 tests 目录中的测试文件
+# *_test.py  # 注释掉，保留 tests 目录中的测试文件
