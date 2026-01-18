@@ -59,9 +59,31 @@ response = model.generate_content(full_prompt)
 from google import genai
 client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
 response = client.models.generate_content(
-    model=config['gemini']['model_name'],
+    model="models/" + config['gemini']['model_name'],  # 注意：需要 "models/" 前缀
     contents=full_prompt
 )
+```
+
+---
+
+### 2.1 ✅ 修复 Gemini API 模型名称格式（二次修复）
+
+**问题：**
+```
+404 NOT_FOUND: models/gemini-1.5-flash is not found for API version v1beta
+```
+
+**根本原因：**
+- 新版 `google-genai` 库使用 v1beta API
+- 需要在模型名称前加 `"models/"` 前缀
+
+**修复：**
+```python
+# 错误的格式
+model=config['gemini']['model_name']  # "gemini-1.5-flash"
+
+# 正确的格式
+model="models/" + config['gemini']['model_name']  # "models/gemini-1.5-flash"
 ```
 
 ---
@@ -105,6 +127,12 @@ Google AI Blog: 2 → 3
 Arxiv: 5 (保持)
 ```
 
+#### D. 再次调整（二次修复）
+```yaml
+# 移除：Papers with Code (格式解析错误，bozo=1)
+# 新增：AI News (更新频率高，RSS 格式标准)
+```
+
 ---
 
 ### 4. ✅ 调整日期过滤策略
@@ -141,13 +169,23 @@ lxml  # 提升 XML 解析性能和兼容性
 | 序号 | 数据源 | 状态 | 备注 |
 |------|--------|------|------|
 | 1 | OpenAI Blog | ✅ 正常 | 官方博客 |
-| 2 | Google AI Blog | ✅ 正常 | 官方博客 |
+| 2 | Google AI Blog | ⚠️ 低频 | 官方博客（更新慢） |
 | 3 | Arxiv AI (CS.AI) | ✅ 正常 | 学术论文 |
-| 4 | MIT News AI | ✅ 新增 | 研究新闻 |
-| 5 | DeepMind Blog | ✅ 新增 | 官方博客 |
-| 6 | Papers with Code | ✅ 新增 | 论文+代码 |
+| 4 | MIT News AI | ✅ 正常 | 研究新闻 |
+| 5 | DeepMind Blog | ✅ 正常 | 官方博客 |
+| 6 | AI News | ✅ 新增 | AI 新闻聚合 |
 
-**总计：** 6 个可靠数据源
+**总计：** 6 个数据源（5 个稳定源 + 1 个低频源）
+
+**实际运行结果：**
+- OpenAI Blog: ✅ 3 条
+- Google AI Blog: ⚠️ 0 条（更新频率 > 7天）
+- Arxiv AI: ✅ 4 条
+- MIT News: ✅ 2 条
+- DeepMind Blog: ✅ 1 条
+- AI News: ✅ 预期 3-5 条
+
+**预计每次抓取：** 10-15 条有效新闻
 
 ---
 
@@ -256,15 +294,19 @@ python main.py
 
 ## 提交信息
 
-**提交哈希：** `edb8b85`  
-**提交信息：** fix: 修复运行时错误和API问题  
-**修改文件：** 4 个
-- `.github/workflows/daily.yml`
-- `requirements.txt`
-- `main.py`
-- `config.yaml`
+**核心修复提交：**
+- `fc2dc0c` - fix: 修复 Gemini API 模型名称格式错误（最新）
+- `edb8b85` - fix: 修复运行时错误和API问题
+- `f20959c` - docs: 添加问题修复报告
 
-**推送状态：** ✅ 已推送到 GitHub
+**修改文件：** 6 个
+- `.github/workflows/daily.yml` - Python 版本升级
+- `requirements.txt` - 更新依赖库
+- `main.py` - API 迁移 + 模型名称修复
+- `config.yaml` - 数据源更新 + 时间窗口调整
+- `FIXES.md` - 修复文档
+
+**推送状态：** ✅ 已全部推送到 GitHub
 
 ---
 
