@@ -778,13 +778,14 @@ if __name__ == "__main__":
     total_items = sum(len(source['items']) for source in sources_data)
     print(f"\n📊 数据统计: {len(sources_data)} 个数据源，共 {total_items} 条新闻")
     
-    # 2. 生成基础 HTML 内容（必须成功）
+    # 2. 生成基础 HTML 内容（必须成功，作为后备）
     print("\n正在生成基础 HTML 内容...")
     basic_html = generate_basic_html(sources_data)
     print("  ✅ 基础内容生成成功")
     
-    # 3. 尝试用 AI 增强内容（可选，失败不影响）
-    print("\n[可选] 尝试使用 AI 增强内容...")
+    # 3. 尝试用 AI 增强内容（等待结果，但失败不终止）
+    print("\n正在尝试使用 AI 生成智能总结...")
+    print("  ⏳ 等待大模型响应（这可能需要10-30秒）...")
     ai_summary = try_enhance_with_ai(sources_data)
     
     # 4. 准备最终邮件内容
@@ -804,17 +805,22 @@ if __name__ == "__main__":
 </body>
 </html>
 """
-        print("  ✅ 将使用 AI 增强版邮件")
+        print("  ✅ AI 总结生成成功，将使用增强版邮件")
     else:
         final_html = basic_html
-        print("  ℹ️  将使用基础版邮件（无 AI 总结）")
+        print("  ⚠️  AI 总结生成失败，将使用基础版邮件（仍包含完整内容）")
     
     # 5. 发送邮件（必须成功）
+    print("\n开始发送邮件...")
     email_sent = send_email(final_html)
     
     if email_sent:
         print("\n" + "=" * 60)
         print("✅ 任务完成！邮件已发送")
+        if ai_summary:
+            print("   📧 邮件类型: AI 增强版（包含智能总结）")
+        else:
+            print("   📧 邮件类型: 基础版（包含所有原始内容）")
         print("=" * 60)
     else:
         print("\n" + "=" * 60)

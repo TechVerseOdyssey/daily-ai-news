@@ -18,7 +18,7 @@ crawler_settings:
   retry_count: 3  # 失败重试次数
   connect_timeout: 10  # 连接超时（秒）
   read_timeout: 30  # 读取超时（秒）
-  content_freshness_hours: 168  # 内容新鲜度（小时），只抓取N小时内的内容（168小时=7天）
+  content_freshness_hours: 24  # 内容新鲜度（小时），只抓取N小时内的内容（24小时=1天）
 
 # 数据源 (RSS/Atom)
 feeds:
@@ -30,7 +30,7 @@ feeds:
     url: "http://googleaiblog.blogspot.com/atom.xml"
     max_items: 5
     # Google 博客更新频率较低，给予更宽松的时间窗口
-    custom_freshness_hours: 720  # 30天，覆盖全局设置
+    custom_freshness_hours: 168  # 7天，覆盖全局的 24 小时设置
 
   - name: "Arxiv AI (CS.AI)"
     url: "http://export.arxiv.org/api/query?search_query=cat:cs.AI&sortBy=submittedDate&sortOrder=descending&max_results=5"
