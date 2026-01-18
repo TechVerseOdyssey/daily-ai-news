@@ -423,6 +423,126 @@ def fetch_single_feed(feed_conf, retry_count=3):
             save_cache(cache_key, section_text)
             
             return section_text
+        
+
+def fetch_single_feed_structured(feed_conf, retry_count=3):
+    """
+    抓取单个 RSS 源并返回结构化数据（用于新架构）
+    
+    Returns:
+        dict: {'source': '数据源名称', 'items': [{'title': '...', 'link': '...', 'summary': '...'}]}
+    """
+    feed_name = feed_conf['name']
+    feed_url = feed_conf['url']
+    max_items = feed_conf.get('max_items', 3)
+    is_arxiv = feed_conf.get('type') == 'arxiv' or 'arxiv' in feed_url.lower()
+    
+    # 检查缓存
+    cache_key = hashlib.md5(feed_url.encode()).hexdigest()
+    cached_data = load_cache(cache_key, max_age_hours=6)
+    
+    for attempt in range(retry_count):
+        try:
+            if attempt > 0:
+                wait_time = 2 ** (attempt - 1)
+                print(f"  - 重试 {feed_name} (第 {attempt + 1}/{retry_count} 次，等待 {wait_time}秒)...")
+                time.sleep(wait_time)
+            
+            print(f"正在抓取: {feed_name}...")
+            response = requests.get(
+                feed_url, 
+                headers=HEADERS,
+                timeout=(10, 30),
+                allow_redirects=True
+            )
+            response.raise_for_status()
+            
+            if response.encoding is None or response.encoding.lower() == 'iso-8859-1':
+                response.encoding = response.apparent_encoding or 'utf-8'
+            
+            feed = feedparser.parse(response.content)
+            
+            if feed.bozo and not is_arxiv:
+                if attempt < retry_count - 1:
+                    print(f"  - 警告: {feed_name} 格式解析错误，将重试...")
+                    continue
+            
+            if not feed.entries:
+                print(f"  - 警告: {feed_name} 没有找到任何条目")
+                return None
+            
+            time_window_hours = feed_conf.get('custom_freshness_hours', 
+                                             config.get('crawler_settings', {}).get('content_freshness_hours', 168))
+            
+            items = []
+            filtered_by_date = 0
+            filtered_by_validation = 0
+            
+            for item in feed.entries[:max_items * 2]:
+                if len(items) >= max_items:
+                    break
+                
+                if not is_content_fresh(item, hours=time_window_hours):
+                    filtered_by_date += 1
+                    continue
+                
+                if is_arxiv:
+                    title, link, desc = parse_arxiv_entry(item)
+                else:
+                    title = item.get('title', '无标题')
+                    link = item.get('link', '')
+                    desc = item.get('description', item.get('summary', ''))
+                
+                clean_desc = clean_html_content(desc)
+                if len(clean_desc) > 300:
+                    clean_desc = clean_desc[:300] + "..."
+                elif not clean_desc:
+                    clean_desc = "无摘要"
+                
+                if not validate_item_content(title, link, clean_desc):
+                    filtered_by_validation += 1
+                    continue
+                
+                items.append({
+                    'title': title,
+                    'link': link,
+                    'summary': clean_desc
+                })
+            
+            if not items:
+                print(f"  - 警告: {feed_name} 所有内容都被过滤掉了（日期过滤: {filtered_by_date}, 验证失败: {filtered_by_validation}）")
+                return None
+            
+            status_msg = f"  ✓ {feed_name} 抓取成功 ({len(items)} 条有效"
+            if filtered_by_date > 0 or filtered_by_validation > 0:
+                status_msg += f", 过滤: 日期{filtered_by_date}+验证{filtered_by_validation}"
+            status_msg += ")"
+            print(status_msg)
+            
+            result = {
+                'source': feed_name,
+                'items': items
+            }
+            
+            # 保存到缓存
+            save_cache(cache_key + '_structured', result)
+            
+            return result
+            
+        except requests.exceptions.Timeout:
+            if attempt == retry_count - 1:
+                print(f"  ✗ {feed_name} 抓取失败：连接超时")
+                return None
+        except requests.exceptions.RequestException as e:
+            if attempt == retry_count - 1:
+                print(f"  ✗ {feed_name} 抓取失败：{str(e)}")
+                return None
+        except Exception as e:
+            if attempt == retry_count - 1:
+                print(f"  ✗ {feed_name} 抓取失败：{str(e)}")
+                return None
+    
+    return None
             
         except requests.exceptions.Timeout:
             print(f"  - 超时: {feed_name} (尝试 {attempt + 1}/{retry_count})")
@@ -447,13 +567,16 @@ def fetch_single_feed(feed_conf, retry_count=3):
 
 def fetch_feeds():
     """
-    并发抓取所有 RSS 源并合并为文本
+    并发抓取所有 RSS 源并返回结构化数据
     使用线程池实现并发，提高抓取效率
+    
+    Returns:
+        list: 包含每个源的字典列表 [{'source': '...', 'items': [{'title': '...', 'link': '...', 'summary': '...'}]}]
     """
     print("开始抓取数据...")
     print(f"共有 {len(config['feeds'])} 个数据源")
     
-    combined_content = []
+    all_sources = []
     feeds_config = config['feeds']
     
     # 获取配置的并发数和速率限制
@@ -464,7 +587,7 @@ def fetch_feeds():
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         # 提交所有任务
         future_to_feed = {
-            executor.submit(fetch_single_feed, feed_conf): feed_conf 
+            executor.submit(fetch_single_feed_structured, feed_conf): feed_conf 
             for feed_conf in feeds_config
         }
         
@@ -473,8 +596,8 @@ def fetch_feeds():
             feed_conf = future_to_feed[future]
             try:
                 result = future.result()
-                if result:
-                    combined_content.append(result)
+                if result and result['items']:
+                    all_sources.append(result)
                 
                 # 速率限制：每抓取完一个源，等待一段时间（避免过快请求）
                 if i < len(feeds_config) - 1:  # 最后一个不需要等待
@@ -483,8 +606,71 @@ def fetch_feeds():
             except Exception as e:
                 print(f"  ✗ {feed_conf['name']} 处理失败: {str(e)}")
     
-    print(f"\n抓取完成: 成功 {len(combined_content)}/{len(feeds_config)} 个数据源")
-    return "".join(combined_content)
+    print(f"\n抓取完成: 成功 {len(all_sources)}/{len(feeds_config)} 个数据源")
+    return all_sources
+
+def generate_basic_html(sources_data):
+    """
+    生成基础 HTML 邮件内容（不依赖大模型）
+    
+    Args:
+        sources_data: list of dict, [{'source': '...', 'items': [{'title': '...', 'link': '...', 'summary': '...'}]}]
+    
+    Returns:
+        str: HTML 格式的邮件内容
+    """
+    today = datetime.now().strftime('%Y年%m月%d日')
+    
+    html_parts = []
+    html_parts.append(f"""
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {{ font-family: Arial, 'Microsoft YaHei', sans-serif; line-height: 1.6; color: #333; }}
+        h2 {{ color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }}
+        h3 {{ color: #34495e; margin-top: 30px; }}
+        ul {{ list-style: none; padding: 0; }}
+        li {{ margin: 15px 0; padding: 10px; background: #f8f9fa; border-left: 3px solid #3498db; }}
+        a {{ color: #2980b9; text-decoration: none; font-weight: bold; }}
+        a:hover {{ text-decoration: underline; }}
+        p {{ margin: 5px 0; color: #666; }}
+        .footer {{ margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; color: #999; font-size: 12px; }}
+    </style>
+</head>
+<body>
+    <h2>🤖 AI 每日新闻摘要 - {today}</h2>
+""")
+    
+    total_items = sum(len(source['items']) for source in sources_data)
+    html_parts.append(f"<p>📊 今日共抓取 <b>{len(sources_data)}</b> 个数据源，<b>{total_items}</b> 条新闻</p>")
+    html_parts.append("<hr>")
+    
+    for source in sources_data:
+        html_parts.append(f"\n<h3>📰 {source['source']}</h3>")
+        html_parts.append("<ul>")
+        
+        for item in source['items']:
+            html_parts.append(f"""
+    <li>
+        <a href="{item['link']}" target="_blank">{item['title']}</a>
+        <p>{item['summary']}</p>
+    </li>
+""")
+        
+        html_parts.append("</ul>")
+    
+    html_parts.append(f"""
+    <div class="footer">
+        <p>本邮件由 AI 新闻摘要系统自动生成</p>
+        <p>生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+    </div>
+</body>
+</html>
+""")
+    
+    return "".join(html_parts)
+
 
 def generate_summary(content):
     """调用 Gemini 生成 HTML 早报"""
@@ -516,6 +702,43 @@ def generate_summary(content):
             print(f"备用方法也失败: {e2}")
             return None
 
+
+def try_enhance_with_ai(sources_data):
+    """
+    尝试用大模型增强内容（可选功能，失败不影响主流程）
+    
+    Args:
+        sources_data: 结构化的数据源列表
+    
+    Returns:
+        str or None: AI 生成的总结（HTML 格式），失败返回 None
+    """
+    try:
+        # 将结构化数据转为文本用于大模型
+        content_parts = []
+        for source in sources_data:
+            content_parts.append(f"\n\n--- 来源：{source['source']} ---")
+            for item in source['items']:
+                content_parts.append(f"\n标题: {item['title']}")
+                content_parts.append(f"链接: {item['link']}")
+                content_parts.append(f"摘要: {item['summary']}\n")
+        
+        content_text = "\n".join(content_parts)
+        
+        # 调用 AI 生成总结
+        ai_summary = generate_summary(content_text)
+        
+        if ai_summary:
+            print("  ✅ AI 总结生成成功")
+            return ai_summary
+        else:
+            print("  ⚠️  AI 总结生成失败，将使用基础版本")
+            return None
+            
+    except Exception as e:
+        print(f"  ⚠️  AI 增强功能异常: {e}")
+        return None
+
 def send_email(html_content):
     """发送邮件，返回是否成功"""
     print("正在发送邮件...")
@@ -545,47 +768,56 @@ if __name__ == "__main__":
     print("🤖 AI 每日新闻摘要 - 开始运行")
     print("=" * 60)
     
-    # 生成今天的缓存键
-    today = datetime.now().strftime('%Y-%m-%d')
-    raw_data_cache_key = f"raw_data_{today}"
-    summary_cache_key = f"summary_{today}"
+    # 1. 抓取数据（结构化）
+    sources_data = fetch_feeds()
     
-    # 1. 抓取（优先使用缓存）
-    raw_data = load_cache(raw_data_cache_key, max_age_hours=12)
-    if raw_data:
-        print("\n📦 使用缓存的原始数据")
-    else:
-        raw_data = fetch_feeds()
-        if raw_data:
-            save_cache(raw_data_cache_key, raw_data)
-    
-    if not raw_data or len(raw_data.strip()) < 100:
-        print("\n❌ 没有抓取到足够的数据，终止运行。")
+    if not sources_data or len(sources_data) == 0:
+        print("\n❌ 没有抓取到任何数据，终止运行。")
         exit(1)
     
-    print(f"\n📊 数据统计: 共 {len(raw_data)} 字符")
-        
-    # 2. 总结（优先使用缓存）
-    summary_html = load_cache(summary_cache_key, max_age_hours=12)
-    if summary_html:
-        print("\n📦 使用缓存的摘要数据")
-    else:
-        summary_html = generate_summary(raw_data)
-        if summary_html:
-            save_cache(summary_cache_key, summary_html)
+    total_items = sum(len(source['items']) for source in sources_data)
+    print(f"\n📊 数据统计: {len(sources_data)} 个数据源，共 {total_items} 条新闻")
     
-    # 3. 发送
-    if summary_html:
-        email_sent = send_email(summary_html)
-        if email_sent:
-            print("\n" + "=" * 60)
-            print("✅ 任务完成！")
-            print("=" * 60)
-        else:
-            print("\n" + "=" * 60)
-            print("❌ 邮件发送失败！")
-            print("=" * 60)
-            exit(1)
+    # 2. 生成基础 HTML 内容（必须成功）
+    print("\n正在生成基础 HTML 内容...")
+    basic_html = generate_basic_html(sources_data)
+    print("  ✅ 基础内容生成成功")
+    
+    # 3. 尝试用 AI 增强内容（可选，失败不影响）
+    print("\n[可选] 尝试使用 AI 增强内容...")
+    ai_summary = try_enhance_with_ai(sources_data)
+    
+    # 4. 准备最终邮件内容
+    if ai_summary:
+        # 如果有 AI 总结，将其放在邮件顶部
+        final_html = f"""
+<html>
+<head><meta charset="UTF-8"></head>
+<body>
+    <h2>🌟 AI 智能总结</h2>
+    <div style="background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin-bottom: 30px;">
+        {ai_summary}
+    </div>
+    <hr>
+    <h2>📰 详细内容</h2>
+    {basic_html[basic_html.find('<body>') + 6:basic_html.find('</body>')]}
+</body>
+</html>
+"""
+        print("  ✅ 将使用 AI 增强版邮件")
     else:
-        print("\n❌ 生成总结失败，未发送邮件。")
+        final_html = basic_html
+        print("  ℹ️  将使用基础版邮件（无 AI 总结）")
+    
+    # 5. 发送邮件（必须成功）
+    email_sent = send_email(final_html)
+    
+    if email_sent:
+        print("\n" + "=" * 60)
+        print("✅ 任务完成！邮件已发送")
+        print("=" * 60)
+    else:
+        print("\n" + "=" * 60)
+        print("❌ 邮件发送失败！")
+        print("=" * 60)
         exit(1)
