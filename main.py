@@ -419,15 +419,25 @@ def generate_summary(content):
     full_prompt = config['prompt'] + "\n" + content
     
     try:
-        # 使用新版 API，模型名称格式为 "models/gemini-1.5-flash"
+        # 使用新版 API - 不需要 "models/" 前缀，直接使用模型名称
         response = client.models.generate_content(
-            model="models/" + config['gemini']['model_name'],
+            model=config['gemini']['model_name'],
             contents=full_prompt
         )
         return response.text
     except Exception as e:
         print(f"Gemini API 调用失败: {e}")
-        return None
+        # 尝试使用备用方法
+        try:
+            print("尝试使用备用 API 格式...")
+            from google.generativeai import GenerativeModel, configure
+            configure(api_key=os.environ["GOOGLE_API_KEY"])
+            backup_model = GenerativeModel(config['gemini']['model_name'])
+            backup_response = backup_model.generate_content(full_prompt)
+            return backup_response.text
+        except Exception as e2:
+            print(f"备用方法也失败: {e2}")
+            return None
 
 def send_email(html_content):
     """发送邮件"""

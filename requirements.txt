@@ -1,4 +1,5 @@
 google-genai>=0.2.0
+google-generativeai
 feedparser
 yagmail
 pyyaml
