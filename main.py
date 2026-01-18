@@ -13,6 +13,7 @@ import html
 import re
 import json
 import hashlib
+from email_template import generate_basic_html, wrap_with_ai_summary
 
 # 1. 加载配置
 with open('config.yaml', 'r', encoding='utf-8') as f:
@@ -469,68 +470,6 @@ def fetch_feeds():
     print(f"\n抓取完成: 成功 {len(all_sources)}/{len(feeds_config)} 个数据源")
     return all_sources
 
-def generate_basic_html(sources_data):
-    """
-    生成基础 HTML 邮件内容（不依赖大模型）
-    
-    Args:
-        sources_data: list of dict, [{'source': '...', 'items': [{'title': '...', 'link': '...', 'summary': '...'}]}]
-    
-    Returns:
-        str: HTML 格式的邮件内容
-    """
-    today = datetime.now().strftime('%Y年%m月%d日')
-    
-    html_parts = []
-    html_parts.append(f"""
-<html>
-<head>
-    <meta charset="UTF-8">
-    <style>
-        body {{ font-family: Arial, 'Microsoft YaHei', sans-serif; line-height: 1.6; color: #333; }}
-        h2 {{ color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }}
-        h3 {{ color: #34495e; margin-top: 30px; }}
-        ul {{ list-style: none; padding: 0; }}
-        li {{ margin: 15px 0; padding: 10px; background: #f8f9fa; border-left: 3px solid #3498db; }}
-        a {{ color: #2980b9; text-decoration: none; font-weight: bold; }}
-        a:hover {{ text-decoration: underline; }}
-        p {{ margin: 5px 0; color: #666; }}
-        .footer {{ margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; color: #999; font-size: 12px; }}
-    </style>
-</head>
-<body>
-    <h2>🤖 AI 每日新闻摘要 - {today}</h2>
-""")
-    
-    total_items = sum(len(source['items']) for source in sources_data)
-    html_parts.append(f"<p>📊 今日共抓取 <b>{len(sources_data)}</b> 个数据源，<b>{total_items}</b> 条新闻</p>")
-    html_parts.append("<hr>")
-    
-    for source in sources_data:
-        html_parts.append(f"\n<h3>📰 {source['source']}</h3>")
-        html_parts.append("<ul>")
-        
-        for item in source['items']:
-            html_parts.append(f"""
-    <li>
-        <a href="{item['link']}" target="_blank">{item['title']}</a>
-        <p>{item['summary']}</p>
-    </li>
-""")
-        
-        html_parts.append("</ul>")
-    
-    html_parts.append(f"""
-    <div class="footer">
-        <p>本邮件由 AI 新闻摘要系统自动生成</p>
-        <p>生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-    </div>
-</body>
-</html>
-""")
-    
-    return "".join(html_parts)
-
 
 def generate_summary(content):
     """调用 Gemini 生成 HTML 早报"""
@@ -650,21 +589,8 @@ if __name__ == "__main__":
     
     # 4. 准备最终邮件内容
     if ai_summary:
-        # 如果有 AI 总结，将其放在邮件顶部
-        final_html = f"""
-<html>
-<head><meta charset="UTF-8"></head>
-<body>
-    <h2>🌟 AI 智能总结</h2>
-    <div style="background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin-bottom: 30px;">
-        {ai_summary}
-    </div>
-    <hr>
-    <h2>📰 详细内容</h2>
-    {basic_html[basic_html.find('<body>') + 6:basic_html.find('</body>')]}
-</body>
-</html>
-"""
+        # 如果有 AI 总结，使用模板包装
+        final_html = wrap_with_ai_summary(basic_html, ai_summary)
         print("  ✅ AI 总结生成成功，将使用增强版邮件")
     else:
         final_html = basic_html
