@@ -1,0 +1,55 @@
+# 邮件设置
+email_settings:
+  subject: "🤖 AI 每日早报 - Gemini 严选"
+  receiver: "您的收件邮箱@example.com"  # <--- 请修改这里为您的接收邮箱
+  smtp_host: "smtp.qq.com"  # QQ邮箱: smtp.qq.com, Gmail: smtp.gmail.com, 163: smtp.163.com
+
+# Gemini 模型设置
+gemini:
+  model_name: "gemini-1.5-flash" # 免费、快速、长上下文
+
+# 爬虫设置（专业级配置）
+crawler_settings:
+  max_workers: 5  # 并发抓取线程数（建议 3-8）
+  rate_limit_seconds: 0.5  # 每个请求之间的间隔时间（秒），避免触发反爬虫
+  retry_count: 3  # 失败重试次数
+  connect_timeout: 10  # 连接超时（秒）
+  read_timeout: 30  # 读取超时（秒）
+  content_freshness_hours: 48  # 内容新鲜度（小时），只抓取N小时内的内容
+
+# 数据源 (RSS/Atom)
+feeds:
+  - name: "Hugging Face Daily Papers"
+    url: "https://huggingface.co/papers/daily_papers.rss"
+    max_items: 5
+
+  - name: "GitHub Python Trending (via RSSHub)"
+    # GitHub Actions 在海外，可以直接访问官方 RSSHub
+    url: "https://rsshub.app/github/trending/daily/python"
+    max_items: 5
+
+  - name: "OpenAI Blog"
+    url: "https://openai.com/blog/rss.xml"
+    max_items: 2
+
+  - name: "Google AI Blog"
+    url: "http://googleaiblog.blogspot.com/atom.xml"
+    max_items: 2
+    
+  - name: "Arxiv AI (CS.AI)"
+    url: "http://export.arxiv.org/api/query?search_query=cat:cs.AI&sortBy=submittedDate&sortOrder=descending&max_results=5"
+    type: "arxiv" # 特殊标记
+
+# 提示词
+prompt: |
+  你是一位资深的科技主编。请阅读以下抓取到的 AI 领域原始新闻数据，为我生成一份高质量的“AI 行业早报”。
+  
+  【要求】
+  1. 结构清晰：请使用 HTML 格式输出。
+  2. 分类整理：内容需分为 <h3>🔥 热门模型/项目</h3>、<h3>📄 前沿论文</h3>、<h3>📰 行业动态</h3> 三个板块。
+  3. 内容精炼：每条新闻包含“中文标题”、“原始链接”和“一句话核心摘要（中文）”。
+  4. 翻译：所有英文内容必须翻译成流畅的中文。
+  5. 过滤：如果内容包含无意义的广告或重复信息，请自动忽略。
+  6. 格式：使用 <ul>, <li>, <b>, <a href="..."> 等标签进行排版，不要使用 markdown 代码块（```html）。
+
+  【原始数据如下】：

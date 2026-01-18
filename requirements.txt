@@ -1,0 +1,6 @@
+google-generativeai
+feedparser
+yagmail
+pyyaml
+beautifulsoup4
+requests
