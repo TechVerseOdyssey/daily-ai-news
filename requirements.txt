@@ -1,6 +1,7 @@
-google-generativeai
+google-genai>=0.2.0
 feedparser
 yagmail
 pyyaml
 beautifulsoup4
 requests
+lxml

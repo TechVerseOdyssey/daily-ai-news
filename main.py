@@ -2,7 +2,7 @@ import os
 import yaml
 import feedparser
 import yagmail
-import google.generativeai as genai
+from google import genai
 from datetime import datetime, timedelta, timezone
 import time
 from bs4 import BeautifulSoup
@@ -18,9 +18,8 @@ import hashlib
 with open('config.yaml', 'r', encoding='utf-8') as f:
     config = yaml.safe_load(f)
 
-# 2. 配置 Gemini
-genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
-model = genai.GenerativeModel(config['gemini']['model_name'])
+# 2. 配置 Gemini (使用新版 API)
+client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
 
 # 3. 请求头配置 - 模拟真实浏览器
 HEADERS = {
@@ -420,7 +419,10 @@ def generate_summary(content):
     full_prompt = config['prompt'] + "\n" + content
     
     try:
-        response = model.generate_content(full_prompt)
+        response = client.models.generate_content(
+            model=config['gemini']['model_name'],
+            contents=full_prompt
+        )
         return response.text
     except Exception as e:
         print(f"Gemini API 调用失败: {e}")

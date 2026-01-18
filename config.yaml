@@ -15,30 +15,34 @@ crawler_settings:
   retry_count: 3  # 失败重试次数
   connect_timeout: 10  # 连接超时（秒）
   read_timeout: 30  # 读取超时（秒）
-  content_freshness_hours: 48  # 内容新鲜度（小时），只抓取N小时内的内容
+  content_freshness_hours: 168  # 内容新鲜度（小时），只抓取N小时内的内容（168小时=7天）
 
 # 数据源 (RSS/Atom)
 feeds:
-  - name: "Hugging Face Daily Papers"
-    url: "https://huggingface.co/papers/daily_papers.rss"
-    max_items: 5
-
-  - name: "GitHub Python Trending (via RSSHub)"
-    # GitHub Actions 在海外，可以直接访问官方 RSSHub
-    url: "https://rsshub.app/github/trending/daily/python"
-    max_items: 5
-
   - name: "OpenAI Blog"
     url: "https://openai.com/blog/rss.xml"
-    max_items: 2
+    max_items: 3
 
   - name: "Google AI Blog"
     url: "http://googleaiblog.blogspot.com/atom.xml"
-    max_items: 2
+    max_items: 3
     
   - name: "Arxiv AI (CS.AI)"
     url: "http://export.arxiv.org/api/query?search_query=cat:cs.AI&sortBy=submittedDate&sortOrder=descending&max_results=5"
-    type: "arxiv" # 特殊标记
+    type: "arxiv"
+    max_items: 5
+
+  - name: "MIT News - Artificial Intelligence"
+    url: "https://news.mit.edu/rss/topic/artificial-intelligence2"
+    max_items: 3
+
+  - name: "DeepMind Blog"
+    url: "https://deepmind.google/blog/rss.xml"
+    max_items: 3
+  
+  - name: "Papers with Code Latest"
+    url: "https://paperswithcode.com/latest/rss/"
+    max_items: 5
 
 # 提示词
 prompt: |
