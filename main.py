@@ -419,8 +419,9 @@ def generate_summary(content):
     full_prompt = config['prompt'] + "\n" + content
     
     try:
+        # 使用新版 API，模型名称格式为 "models/gemini-1.5-flash"
         response = client.models.generate_content(
-            model=config['gemini']['model_name'],
+            model="models/" + config['gemini']['model_name'],
             contents=full_prompt
         )
         return response.text

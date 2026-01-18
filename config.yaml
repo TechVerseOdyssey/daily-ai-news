@@ -40,8 +40,8 @@ feeds:
     url: "https://deepmind.google/blog/rss.xml"
     max_items: 3
   
-  - name: "Papers with Code Latest"
-    url: "https://paperswithcode.com/latest/rss/"
+  - name: "AI News"
+    url: "https://www.artificialintelligence-news.com/feed/"
     max_items: 5
 
 # 提示词
