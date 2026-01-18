@@ -2,7 +2,7 @@ import os
 import yaml
 import feedparser
 import yagmail
-import google.generativeai as genai
+from google import genai
 from datetime import datetime, timedelta, timezone
 import time
 from bs4 import BeautifulSoup
@@ -18,8 +18,8 @@ import hashlib
 with open('config.yaml', 'r', encoding='utf-8') as f:
     config = yaml.safe_load(f)
 
-# 2. 配置 Gemini (使用 google-generativeai)
-genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
+# 2. 配置 Gemini (使用 google-genai 新版 API)
+client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
 
 # 3. 请求头配置 - 模拟真实浏览器
 HEADERS = {
@@ -421,21 +421,21 @@ def generate_summary(content):
     full_prompt = config['prompt'] + "\n" + content
     
     try:
-        # 使用 google-generativeai (主要方式)
-        model = genai.GenerativeModel(config['gemini']['model_name'])
-        response = model.generate_content(full_prompt)
+        # 使用 google-genai 新版 API (主要方式)
+        response = client.models.generate_content(
+            model=config['gemini']['model_name'],
+            contents=full_prompt
+        )
         return response.text
     except Exception as e:
         print(f"Gemini API 调用失败: {e}")
-        # 尝试使用备用方法 (google-genai 新版 API)
+        # 尝试使用备用方法 (google-generativeai 旧版 API)
         try:
-            print("尝试使用备用 API 格式 (google-genai)...")
-            from google import genai as genai_new
-            client = genai_new.Client(api_key=os.environ["GOOGLE_API_KEY"])
-            backup_response = client.models.generate_content(
-                model=config['gemini']['model_name'],
-                contents=full_prompt
-            )
+            print("尝试使用备用 API 格式 (google-generativeai)...")
+            import google.generativeai as genai_old
+            genai_old.configure(api_key=os.environ["GOOGLE_API_KEY"])
+            backup_model = genai_old.GenerativeModel(config['gemini']['model_name'])
+            backup_response = backup_model.generate_content(full_prompt)
             return backup_response.text
         except Exception as e2:
             print(f"备用方法也失败: {e2}")
