@@ -302,129 +302,6 @@ def load_cache(cache_key, max_age_hours=24):
         print(f"缓存加载失败: {e}")
         return None
 
-def fetch_single_feed(feed_conf, retry_count=3):
-    """
-    抓取单个 RSS 源（带重试机制、日期过滤、数据验证）
-    
-    Args:
-        feed_conf: RSS 源配置
-        retry_count: 重试次数
-    
-    Returns:
-        str: 格式化的内容文本，失败返回 None
-    """
-    feed_name = feed_conf['name']
-    feed_url = feed_conf['url']
-    max_items = feed_conf.get('max_items', 3)
-    is_arxiv = feed_conf.get('type') == 'arxiv' or 'arxiv' in feed_url.lower()
-    
-    # 检查缓存
-    cache_key = hashlib.md5(feed_url.encode()).hexdigest()
-    cached_data = load_cache(cache_key, max_age_hours=6)  # 6小时缓存
-    if cached_data:
-        print(f"  📦 {feed_name} 使用缓存数据")
-        return cached_data
-    
-    for attempt in range(retry_count):
-        try:
-            if attempt > 0:
-                # 指数退避：第1次重试等1秒，第2次等2秒，第3次等4秒
-                wait_time = 2 ** (attempt - 1)
-                print(f"  - 重试 {feed_name} (第 {attempt + 1}/{retry_count} 次，等待 {wait_time}秒)...")
-                time.sleep(wait_time)
-            
-            # 使用 requests 先下载，设置超时
-            print(f"正在抓取: {feed_name}...")
-            response = requests.get(
-                feed_url, 
-                headers=HEADERS,
-                timeout=(10, 30),  # (连接超时, 读取超时) 单位：秒
-                allow_redirects=True
-            )
-            response.raise_for_status()  # 检查 HTTP 状态码
-            
-            # 尝试不同的编码
-            if response.encoding is None or response.encoding.lower() == 'iso-8859-1':
-                # 尝试检测编码
-                response.encoding = response.apparent_encoding or 'utf-8'
-            
-            # 解析 RSS/Atom
-            feed = feedparser.parse(response.content)
-            
-            # 检查解析错误
-            if feed.bozo and not is_arxiv:
-                if attempt < retry_count - 1:
-                    print(f"  - 警告: {feed_name} 格式解析错误，将重试...")
-                    continue
-                else:
-                    print(f"  - 警告: {feed_name} 格式可能有问题，但已是最后一次尝试，继续处理...")
-            
-            # 检查是否有内容
-            if not feed.entries:
-                print(f"  - 警告: {feed_name} 没有找到任何条目")
-                return None
-            
-            # 获取配置的时间窗口（小时）
-            # 支持源级别的自定义时间窗口
-            time_window_hours = feed_conf.get('custom_freshness_hours', 
-                                             config.get('crawler_settings', {}).get('content_freshness_hours', 168))
-            
-            # 提取和过滤内容
-            section_text = f"\n\n--- 来源：{feed_name} ---\n"
-            valid_items = 0
-            filtered_by_date = 0
-            filtered_by_validation = 0
-            
-            for item in feed.entries[:max_items * 2]:  # 多抓一些，因为要过滤
-                if valid_items >= max_items:
-                    break
-                
-                # 日期过滤
-                if not is_content_fresh(item, hours=time_window_hours):
-                    filtered_by_date += 1
-                    continue
-                
-                # 特殊处理 Arxiv
-                if is_arxiv:
-                    title, link, desc = parse_arxiv_entry(item)
-                else:
-                    title = item.get('title', '无标题')
-                    link = item.get('link', '')
-                    desc = item.get('description', item.get('summary', ''))
-                
-                # 清理 HTML 标签（使用高级清理函数）
-                clean_desc = clean_html_content(desc)
-                
-                # 限制长度
-                if len(clean_desc) > 300:
-                    clean_desc = clean_desc[:300] + "..."
-                elif not clean_desc:
-                    clean_desc = "无摘要"
-                
-                # 数据验证
-                if not validate_item_content(title, link, clean_desc):
-                    filtered_by_validation += 1
-                    continue
-                
-                section_text += f"标题: {title}\n链接: {link}\n摘要: {clean_desc}\n\n"
-                valid_items += 1
-            
-            if valid_items == 0:
-                print(f"  - 警告: {feed_name} 所有内容都被过滤掉了（日期过滤: {filtered_by_date}, 验证失败: {filtered_by_validation}）")
-                return None
-            
-            status_msg = f"  ✓ {feed_name} 抓取成功 ({valid_items} 条有效"
-            if filtered_by_date > 0 or filtered_by_validation > 0:
-                status_msg += f", 过滤: 日期{filtered_by_date}+验证{filtered_by_validation}"
-            status_msg += ")"
-            print(status_msg)
-            
-            # 保存到缓存
-            save_cache(cache_key, section_text)
-            
-            return section_text
-        
-
 def fetch_single_feed_structured(feed_conf, retry_count=3):
     """
     抓取单个 RSS 源并返回结构化数据（用于新架构）
@@ -439,7 +316,10 @@ def fetch_single_feed_structured(feed_conf, retry_count=3):
     
     # 检查缓存
     cache_key = hashlib.md5(feed_url.encode()).hexdigest()
-    cached_data = load_cache(cache_key, max_age_hours=6)
+    cached_data = load_cache(cache_key + '_structured', max_age_hours=6)
+    if cached_data:
+        print(f"  📦 {feed_name} 使用缓存数据")
+        return cached_data
     
     for attempt in range(retry_count):
         try:
@@ -538,26 +418,6 @@ def fetch_single_feed_structured(feed_conf, retry_count=3):
                 print(f"  ✗ {feed_name} 抓取失败：{str(e)}")
                 return None
         except Exception as e:
-            if attempt == retry_count - 1:
-                print(f"  ✗ {feed_name} 抓取失败：{str(e)}")
-                return None
-    
-    return None
-            
-        except requests.exceptions.Timeout:
-            print(f"  - 超时: {feed_name} (尝试 {attempt + 1}/{retry_count})")
-            if attempt == retry_count - 1:
-                print(f"  ✗ {feed_name} 抓取失败：连接超时")
-                return None
-                
-        except requests.exceptions.RequestException as e:
-            print(f"  - 网络错误: {feed_name} - {str(e)} (尝试 {attempt + 1}/{retry_count})")
-            if attempt == retry_count - 1:
-                print(f"  ✗ {feed_name} 抓取失败：{str(e)}")
-                return None
-                
-        except Exception as e:
-            print(f"  - 未知错误: {feed_name} - {str(e)} (尝试 {attempt + 1}/{retry_count})")
             if attempt == retry_count - 1:
                 print(f"  ✗ {feed_name} 抓取失败：{str(e)}")
                 return None
