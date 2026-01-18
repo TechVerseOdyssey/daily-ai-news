@@ -1,7 +1,7 @@
 # 邮件设置
 email_settings:
   subject: "🤖 AI 每日早报 - Gemini 严选"
-  receiver: "您的收件邮箱@example.com"  # <--- 请修改这里为您的接收邮箱
+  receiver: "tiancheng-liu@qq.com"  # <--- 请修改这里为您的接收邮箱
   smtp_host: "smtp.qq.com"  # QQ邮箱: smtp.qq.com, Gmail: smtp.gmail.com, 163: smtp.163.com
 
 # Gemini 模型设置
