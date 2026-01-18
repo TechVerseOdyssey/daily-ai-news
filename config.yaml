@@ -6,7 +6,7 @@ email_settings:
 
 # Gemini 模型设置
 gemini:
-  model_name: "gemini-1.5-flash" # 免费、快速、长上下文
+  model_name: "gemini-1.5-flash-latest" # 使用最新版本，自动获取最新优化
 
 # 爬虫设置（专业级配置）
 crawler_settings:
@@ -22,6 +22,12 @@ feeds:
   - name: "OpenAI Blog"
     url: "https://openai.com/blog/rss.xml"
     max_items: 3
+
+  - name: "Google AI Blog"
+    url: "http://googleaiblog.blogspot.com/atom.xml"
+    max_items: 5
+    # Google 博客更新频率较低，给予更宽松的时间窗口
+    custom_freshness_hours: 720  # 30天，覆盖全局设置
 
   - name: "Arxiv AI (CS.AI)"
     url: "http://export.arxiv.org/api/query?search_query=cat:cs.AI&sortBy=submittedDate&sortOrder=descending&max_results=5"
