@@ -28,6 +28,7 @@ bash tests/setup_and_test.sh
 ```
 
 这个脚本会：
+
 1. 检查 Python 版本
 2. 安装依赖
 3. 运行所有不需要网络的测试
@@ -72,12 +73,12 @@ python tests/test_01_config.py
 
 ### 🌐 需要网络的测试
 
-4. **单源抓取** (`test_04_fetch_single.py`)
+1. **单源抓取** (`test_04_fetch_single.py`)
    - RSS 连接测试
    - 重试机制验证
    - 内容质量检查
 
-5. **并发抓取** (`test_05_concurrent.py`)
+2. **并发抓取** (`test_05_concurrent.py`)
    - 多线程性能测试
    - 抓取速度验证
    - 数据完整性检查
@@ -152,17 +153,20 @@ python tests/test_01_config.py
 ## 🐛 故障排查
 
 ### 依赖问题
+
 ```bash
 pip install -r requirements.txt --upgrade
 ```
 
 ### 权限问题
+
 ```bash
 chmod +x tests/*.py
 chmod +x tests/*.sh
 ```
 
 ### 网络问题
+
 ```bash
 # 只运行离线测试
 python tests/run_all_tests.py --skip-network
@@ -173,6 +177,7 @@ python tests/run_all_tests.py --skip-network
 测试通过后，你可以：
 
 1. **本地运行完整程序**
+
    ```bash
    export GOOGLE_API_KEY="your_key"
    export EMAIL_USER="your_email"
