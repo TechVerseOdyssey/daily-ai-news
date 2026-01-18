@@ -294,7 +294,9 @@ def fetch_single_feed(feed_conf, retry_count=3):
                 return None
             
             # 获取配置的时间窗口（小时）
-            time_window_hours = config.get('crawler_settings', {}).get('content_freshness_hours', 48)
+            # 支持源级别的自定义时间窗口
+            time_window_hours = feed_conf.get('custom_freshness_hours', 
+                                             config.get('crawler_settings', {}).get('content_freshness_hours', 168))
             
             # 提取和过滤内容
             section_text = f"\n\n--- 来源：{feed_name} ---\n"
