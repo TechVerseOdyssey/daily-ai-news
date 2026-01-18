@@ -21,6 +21,77 @@ with open('config.yaml', 'r', encoding='utf-8') as f:
 # 2. 配置 Gemini (使用 google-genai 新版 API)
 client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
 
+
+def get_available_model():
+    """
+    获取可用的免费 Gemini 模型
+    优先使用配置文件中指定的模型，如果不可用则自动选择
+    
+    Returns:
+        str: 可用的模型名称
+    """
+    # 优先尝试的模型列表（按优先级排序）
+    preferred_models = [
+        'gemini-2.0-flash',
+        'gemini-1.5-flash',
+        'gemini-1.5-pro',
+        'gemini-pro',
+    ]
+    
+    # 如果配置文件中指定了模型，优先尝试
+    config_model = config.get('gemini', {}).get('model_name', '')
+    if config_model and config_model not in preferred_models:
+        preferred_models.insert(0, config_model)
+    
+    try:
+        # 获取可用模型列表
+        print("正在获取可用的 Gemini 模型...")
+        available_models = []
+        
+        for model in client.models.list():
+            model_name = model.name
+            # 模型名称格式: models/gemini-2.0-flash -> gemini-2.0-flash
+            if model_name.startswith('models/'):
+                model_name = model_name[7:]
+            available_models.append(model_name)
+        
+        print(f"  发现 {len(available_models)} 个可用模型")
+        
+        # 按优先级选择模型
+        for preferred in preferred_models:
+            # 精确匹配
+            if preferred in available_models:
+                print(f"  ✓ 选择模型: {preferred}")
+                return preferred
+            # 前缀匹配（如 gemini-2.0-flash 匹配 gemini-2.0-flash-exp）
+            for available in available_models:
+                if available.startswith(preferred):
+                    print(f"  ✓ 选择模型: {available}")
+                    return available
+        
+        # 如果都没有，选择第一个包含 'flash' 的模型（通常是免费的）
+        for available in available_models:
+            if 'flash' in available.lower():
+                print(f"  ✓ 选择模型: {available}")
+                return available
+        
+        # 最后兜底：返回第一个 gemini 模型
+        for available in available_models:
+            if 'gemini' in available.lower():
+                print(f"  ✓ 选择模型: {available}")
+                return available
+        
+        # 如果实在找不到，返回配置的默认值
+        print(f"  ⚠ 未找到可用模型，使用配置默认值: {config_model}")
+        return config_model
+        
+    except Exception as e:
+        print(f"  ⚠ 获取模型列表失败: {e}")
+        # 返回配置的默认值
+        fallback = config.get('gemini', {}).get('model_name', 'gemini-2.0-flash')
+        print(f"  使用默认模型: {fallback}")
+        return fallback
+
 # 3. 请求头配置 - 模拟真实浏览器
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -420,10 +491,14 @@ def generate_summary(content):
     print("正在调用 Gemini 进行总结 (可能需要十几秒)...")
     full_prompt = config['prompt'] + "\n" + content
     
+    # 自动获取可用模型
+    model_name = get_available_model()
+    
     try:
         # 使用 google-genai 新版 API (主要方式)
+        print(f"使用模型: {model_name}")
         response = client.models.generate_content(
-            model=config['gemini']['model_name'],
+            model=model_name,
             contents=full_prompt
         )
         return response.text
@@ -434,7 +509,7 @@ def generate_summary(content):
             print("尝试使用备用 API 格式 (google-generativeai)...")
             import google.generativeai as genai_old
             genai_old.configure(api_key=os.environ["GOOGLE_API_KEY"])
-            backup_model = genai_old.GenerativeModel(config['gemini']['model_name'])
+            backup_model = genai_old.GenerativeModel(model_name)
             backup_response = backup_model.generate_content(full_prompt)
             return backup_response.text
         except Exception as e2:
@@ -442,7 +517,7 @@ def generate_summary(content):
             return None
 
 def send_email(html_content):
-    """发送邮件"""
+    """发送邮件，返回是否成功"""
     print("正在发送邮件...")
     try:
         user = os.environ["EMAIL_USER"]
@@ -450,16 +525,19 @@ def send_email(html_content):
         receiver = config['email_settings']['receiver']
         subject = f"{config['email_settings']['subject']} ({datetime.now().strftime('%Y-%m-%d')})"
         smtp_host = config['email_settings'].get('smtp_host', 'smtp.gmail.com')
+        smtp_port = config['email_settings'].get('smtp_port', 465)  # QQ邮箱默认465
         
-        yag = yagmail.SMTP(user=user, password=password, host=smtp_host)
+        yag = yagmail.SMTP(user=user, password=password, host=smtp_host, port=smtp_port)
         yag.send(
             to=receiver,
             subject=subject,
             contents=[html_content] # yagmail 自动识别 HTML
         )
         print("邮件发送成功！")
+        return True
     except Exception as e:
         print(f"邮件发送失败: {e}")
+        return False
 
 # 主程序
 if __name__ == "__main__":
@@ -498,10 +576,16 @@ if __name__ == "__main__":
     
     # 3. 发送
     if summary_html:
-        send_email(summary_html)
-        print("\n" + "=" * 60)
-        print("✅ 任务完成！")
-        print("=" * 60)
+        email_sent = send_email(summary_html)
+        if email_sent:
+            print("\n" + "=" * 60)
+            print("✅ 任务完成！")
+            print("=" * 60)
+        else:
+            print("\n" + "=" * 60)
+            print("❌ 邮件发送失败！")
+            print("=" * 60)
+            exit(1)
     else:
         print("\n❌ 生成总结失败，未发送邮件。")
         exit(1)

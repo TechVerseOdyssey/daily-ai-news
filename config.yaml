@@ -3,10 +3,13 @@ email_settings:
   subject: "🤖 AI 每日早报 - Gemini 严选"
   receiver: "tiancheng-liu@qq.com"  # <--- 请修改这里为您的接收邮箱
   smtp_host: "smtp.qq.com"  # QQ邮箱: smtp.qq.com, Gmail: smtp.gmail.com, 163: smtp.163.com
+  smtp_port: 465  # QQ/163邮箱: 465(SSL), Gmail: 587(TLS)
 
 # Gemini 模型设置
 gemini:
-  model_name: "gemini-1.5-flash-latest" # 使用最新版本，自动获取最新优化
+  # 优先使用的模型名称（如果不可用，会自动选择其他免费模型）
+  # 常用: gemini-2.0-flash, gemini-1.5-flash, gemini-1.5-pro
+  model_name: "gemini-2.0-flash"
 
 # 爬虫设置（专业级配置）
 crawler_settings:
