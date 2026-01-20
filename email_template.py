@@ -19,29 +19,24 @@ def generate_basic_html(sources_data):
     today = datetime.now().strftime('%Y年%m月%d日')
     weekday = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'][datetime.now().weekday()]
     
-    # 使用内联样式避免CSS解析问题
+    # 使用内联样式避免CSS解析问题，紧凑HTML避免空白
     html_parts = []
-    html_parts.append(f"""<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="margin:0;padding:15px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;background:#f0f2f5;line-height:1.6;">
-    <div style="max-width:700px;margin:0 auto;background:#ffffff;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.1);overflow:hidden;">
-        <div style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:24px 20px;text-align:center;">
-            <h1 style="font-size:24px;font-weight:700;margin:0 0 6px 0;">🤖 AI 每日新闻摘要</h1>
-            <div style="font-size:14px;opacity:0.9;">{today} {weekday}</div>
-        </div>
-        <table style="width:100%;background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%);color:white;" cellpadding="0" cellspacing="0">
-            <tr>
-                <td style="width:33.33%;text-align:center;padding:12px 8px;"><div style="font-size:22px;font-weight:bold;">{len(sources_data)}</div><div style="font-size:12px;opacity:0.9;margin-top:2px;">数据源</div></td>
-                <td style="width:33.33%;text-align:center;padding:12px 8px;border-left:1px solid rgba(255,255,255,0.2);border-right:1px solid rgba(255,255,255,0.2);"><div style="font-size:22px;font-weight:bold;">{sum(len(source['items']) for source in sources_data)}</div><div style="font-size:12px;opacity:0.9;margin-top:2px;">新闻条数</div></td>
-                <td style="width:33.33%;text-align:center;padding:12px 8px;"><div style="font-size:22px;font-weight:bold;">24h</div><div style="font-size:12px;opacity:0.9;margin-top:2px;">时效性</div></td>
-            </tr>
-        </table>
-        <div style="padding:20px;">
-""")
+    total_news = sum(len(source['items']) for source in sources_data)
+    html_parts.append(f'<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>')
+    html_parts.append(f'<body style="margin:0;padding:10px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',\'PingFang SC\',sans-serif;background:#f0f2f5;line-height:1.5;">')
+    html_parts.append(f'<div style="max-width:640px;margin:0 auto;background:#fff;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,0.08);overflow:hidden;">')
+    # 头部
+    html_parts.append(f'<div style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;padding:16px;text-align:center;">')
+    html_parts.append(f'<div style="font-size:20px;font-weight:700;margin-bottom:4px;">🤖 AI 每日新闻摘要</div>')
+    html_parts.append(f'<div style="font-size:13px;opacity:0.9;">{today} {weekday}</div></div>')
+    # 统计栏
+    html_parts.append(f'<table style="width:100%;background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%);color:#fff;" cellpadding="0" cellspacing="0"><tr>')
+    html_parts.append(f'<td style="width:33%;text-align:center;padding:10px 5px;"><b style="font-size:20px;">{len(sources_data)}</b><div style="font-size:11px;opacity:0.9;">数据源</div></td>')
+    html_parts.append(f'<td style="width:34%;text-align:center;padding:10px 5px;border-left:1px solid rgba(255,255,255,0.2);border-right:1px solid rgba(255,255,255,0.2);"><b style="font-size:20px;">{total_news}</b><div style="font-size:11px;opacity:0.9;">新闻条数</div></td>')
+    html_parts.append(f'<td style="width:33%;text-align:center;padding:10px 5px;"><b style="font-size:20px;">24h</b><div style="font-size:11px;opacity:0.9;">时效性</div></td>')
+    html_parts.append(f'</tr></table>')
+    # 内容区域
+    html_parts.append(f'<div style="padding:12px 16px;">')
     
     # 数据源图标映射
     source_icons = {
@@ -62,40 +57,25 @@ def generate_basic_html(sources_data):
                 icon = emoji
                 break
         
-        html_parts.append(f"""
-            <div style="margin-bottom:24px;">
-                <div style="margin-bottom:12px;padding-bottom:10px;border-bottom:2px solid #667eea;">
-                    <span style="display:inline-block;width:28px;height:28px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:6px;text-align:center;line-height:28px;font-size:14px;margin-right:10px;vertical-align:middle;">{icon}</span>
-                    <span style="font-size:18px;font-weight:600;color:#2d3748;vertical-align:middle;">{source['source']}</span>
-                </div>
-                <ul style="list-style:none;margin:0;padding:0;">
-""")
+        # 数据源标题
+        html_parts.append(f'<div style="margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid #667eea;">')
+        html_parts.append(f'<span style="display:inline-block;width:22px;height:22px;background:linear-gradient(135deg,#667eea,#764ba2);border-radius:4px;text-align:center;line-height:22px;font-size:12px;margin-right:6px;vertical-align:middle;">{icon}</span>')
+        html_parts.append(f'<span style="font-size:15px;font-weight:600;color:#2d3748;vertical-align:middle;">{source["source"]}</span></div>')
         
         for item in source['items']:
-            html_parts.append(f"""
-                    <li style="background:#f8f9fa;border-radius:8px;padding:14px 16px;margin-bottom:10px;border-left:3px solid #667eea;">
-                        <div style="font-size:15px;font-weight:600;line-height:1.4;margin-bottom:6px;">
-                            <a href="{item['link']}" target="_blank" style="color:#2d3748;text-decoration:none;">{item['title']}</a>
-                        </div>
-                        <div style="color:#666;font-size:13px;line-height:1.5;">{item['summary']}</div>
-                        <a href="{item['link']}" target="_blank" style="display:inline-block;margin-top:8px;color:#667eea;font-size:12px;font-weight:500;text-decoration:none;">阅读全文 →</a>
-                    </li>
-""")
+            html_parts.append(f'<div style="background:#f8f9fa;border-radius:6px;padding:10px 12px;margin-bottom:8px;border-left:3px solid #667eea;">')
+            html_parts.append(f'<div style="font-size:14px;font-weight:600;line-height:1.3;margin-bottom:4px;"><a href="{item["link"]}" target="_blank" style="color:#2d3748;text-decoration:none;">{item["title"]}</a></div>')
+            html_parts.append(f'<div style="color:#666;font-size:12px;line-height:1.4;">{item["summary"]}</div>')
+            html_parts.append(f'<a href="{item["link"]}" target="_blank" style="display:inline-block;margin-top:6px;color:#667eea;font-size:11px;font-weight:500;text-decoration:none;">阅读全文 →</a></div>')
         
-        html_parts.append("""
-                </ul>
-            </div>
-""")
+        # 数据源分隔
+        html_parts.append('<div style="margin-bottom:12px;"></div>')
     
-    html_parts.append(f"""
-        </div>
-        <div style="background:#f8f9fa;padding:16px;text-align:center;border-top:1px solid #e9ecef;">
-            <p style="color:#888;font-size:12px;margin:0;">🤖 AI 新闻摘要 · {datetime.now().strftime('%Y-%m-%d %H:%M')} · ⚡ 智能抓取</p>
-        </div>
-    </div>
-</body>
-</html>
-""")
+    # 页脚
+    html_parts.append('</div>')
+    html_parts.append(f'<div style="background:#f8f9fa;padding:10px;text-align:center;border-top:1px solid #e9ecef;">')
+    html_parts.append(f'<span style="color:#888;font-size:11px;">🤖 AI新闻摘要 · {datetime.now().strftime("%Y-%m-%d %H:%M")} · ⚡智能抓取</span></div>')
+    html_parts.append('</div></body></html>')
     
     return "".join(html_parts)
 
@@ -111,26 +91,18 @@ def wrap_with_ai_summary(basic_html, ai_summary):
     Returns:
         str: 包含 AI 总结的完整 HTML 邮件
     """
-    # 查找内容区域的开始位置（padding:20px 的 div）
-    content_marker = '<div style="padding:20px;">'
+    # 查找内容区域的开始位置
+    content_marker = '<div style="padding:12px 16px;">'
     body_start = basic_html.find(content_marker)
     
     if body_start == -1:
-        # 如果找不到，直接返回原始HTML
         return basic_html
     
-    # 构建 AI 增强版邮件：在内容区域前插入AI总结
-    ai_summary_html = f"""
-        <div style="background:linear-gradient(135deg,#fff3e0 0%,#ffe0b2 100%);padding:16px 20px;border-bottom:1px solid #ffcc80;">
-            <div style="margin-bottom:10px;">
-                <span style="display:inline-block;width:24px;height:24px;background:#ff9800;border-radius:6px;text-align:center;line-height:24px;font-size:12px;margin-right:8px;vertical-align:middle;">✨</span>
-                <span style="color:#e65100;font-size:16px;font-weight:600;vertical-align:middle;">AI 智能总结</span>
-            </div>
-            <div style="background:rgba(255,255,255,0.9);padding:14px;border-radius:8px;color:#333;line-height:1.7;font-size:14px;">
-                {ai_summary}
-            </div>
-        </div>
-        """
+    # 构建 AI 增强版邮件：在内容区域前插入AI总结（紧凑格式）
+    ai_summary_html = '<div style="background:linear-gradient(135deg,#fff3e0,#ffe0b2);padding:12px 16px;border-bottom:1px solid #ffcc80;">'
+    ai_summary_html += '<div style="margin-bottom:8px;"><span style="display:inline-block;width:20px;height:20px;background:#ff9800;border-radius:4px;text-align:center;line-height:20px;font-size:10px;margin-right:6px;vertical-align:middle;">✨</span>'
+    ai_summary_html += '<span style="color:#e65100;font-size:14px;font-weight:600;vertical-align:middle;">AI 智能总结</span></div>'
+    ai_summary_html += f'<div style="background:rgba(255,255,255,0.9);padding:10px;border-radius:6px;color:#333;line-height:1.6;font-size:13px;">{ai_summary}</div></div>'
     
     enhanced_html = basic_html[:body_start] + ai_summary_html + basic_html[body_start:]
     

@@ -52,3 +52,4 @@ tests/__pycache__/
 # Test files (but keep tests/ directory)
 # test_*.py  # 注释掉，保留 tests 目录中的测试文件
 # *_test.py  # 注释掉，保留 tests 目录中的测试文件
+.codebuddy/rules
