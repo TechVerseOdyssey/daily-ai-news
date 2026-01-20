@@ -703,27 +703,209 @@ def try_enhance_with_ai(sources_data):
         print(f"  ⚠️  AI 增强功能异常: {e}")
         return None
 
+# 常用邮箱服务商 SMTP 配置
+SMTP_CONFIGS = {
+    'qq.com': {'host': 'smtp.qq.com', 'port': 465},
+    'foxmail.com': {'host': 'smtp.qq.com', 'port': 465},
+    'gmail.com': {'host': 'smtp.gmail.com', 'port': 587},
+    'googlemail.com': {'host': 'smtp.gmail.com', 'port': 587},
+    '163.com': {'host': 'smtp.163.com', 'port': 465},
+    '126.com': {'host': 'smtp.126.com', 'port': 465},
+    'yeah.net': {'host': 'smtp.yeah.net', 'port': 465},
+    'sina.com': {'host': 'smtp.sina.com', 'port': 465},
+    'sina.cn': {'host': 'smtp.sina.cn', 'port': 465},
+    'sohu.com': {'host': 'smtp.sohu.com', 'port': 465},
+    'aliyun.com': {'host': 'smtp.aliyun.com', 'port': 465},
+    'outlook.com': {'host': 'smtp.office365.com', 'port': 587},
+    'hotmail.com': {'host': 'smtp.office365.com', 'port': 587},
+    'live.com': {'host': 'smtp.office365.com', 'port': 587},
+    'yahoo.com': {'host': 'smtp.mail.yahoo.com', 'port': 465},
+}
+
+
+def is_valid_email(email):
+    """
+    校验邮箱地址是否有效
+    
+    Args:
+        email: 邮箱地址字符串
+    
+    Returns:
+        bool: 是否有效
+    """
+    if not email or not isinstance(email, str):
+        return False
+    
+    # 去除首尾空白
+    email = email.strip()
+    
+    # 基本格式校验：xxx@xxx.xxx
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return bool(re.match(pattern, email))
+
+
+def parse_email_receivers(receiver_str):
+    """
+    解析收件人字符串，支持多种分隔符
+    
+    Args:
+        receiver_str: 收件人字符串，支持 ',' ';' 或空格分隔
+    
+    Returns:
+        list: 有效的邮箱地址列表
+    """
+    if not receiver_str:
+        return []
+    
+    # 统一分隔符：将 ; 和空格替换为 ,
+    normalized = receiver_str.replace(';', ',').replace(' ', ',')
+    
+    # 分割并过滤
+    candidates = [email.strip() for email in normalized.split(',')]
+    
+    # 校验有效性
+    valid_emails = []
+    invalid_emails = []
+    
+    for email in candidates:
+        if not email:  # 跳过空字符串
+            continue
+        if is_valid_email(email):
+            valid_emails.append(email)
+        else:
+            invalid_emails.append(email)
+    
+    # 输出无效邮箱警告
+    if invalid_emails:
+        print(f"  ⚠️  以下邮箱地址无效，已跳过: {', '.join(invalid_emails)}")
+    
+    return valid_emails
+
+
+def get_smtp_config(sender_email):
+    """
+    根据发件人邮箱自动获取 SMTP 配置
+    
+    Args:
+        sender_email: 发件人邮箱地址
+    
+    Returns:
+        tuple: (smtp_host, smtp_port)
+    """
+    if not sender_email or '@' not in sender_email:
+        # 默认使用 Gmail
+        return 'smtp.gmail.com', 587
+    
+    # 提取邮箱域名
+    domain = sender_email.split('@')[-1].lower()
+    
+    # 查找匹配的配置
+    if domain in SMTP_CONFIGS:
+        smtp_config = SMTP_CONFIGS[domain]
+        return smtp_config['host'], smtp_config['port']
+    
+    # 尝试匹配子域名（如 mail.example.com -> example.com）
+    parts = domain.split('.')
+    if len(parts) > 2:
+        parent_domain = '.'.join(parts[-2:])
+        if parent_domain in SMTP_CONFIGS:
+            smtp_config = SMTP_CONFIGS[parent_domain]
+            return smtp_config['host'], smtp_config['port']
+    
+    # 未知域名，尝试通用格式 smtp.domain
+    print(f"  ⚠️  未知邮箱域名 '{domain}'，尝试使用 smtp.{domain}:465")
+    return f'smtp.{domain}', 465
+
+
+def get_email_credentials():
+    """
+    获取邮件凭证和收件人，带有友好的错误提示
+    
+    Returns:
+        tuple: (user, password, receivers) 或 (None, None, None) 如果缺失
+    """
+    user = os.environ.get("EMAIL_USER")
+    password = os.environ.get("EMAIL_PASSWORD")
+    receiver_str = os.environ.get("EMAIL_RECEIVER", "")
+    
+    errors = []
+    
+    if not user:
+        errors.append("EMAIL_USER (发件人邮箱)")
+    if not password:
+        errors.append("EMAIL_PASSWORD (邮箱授权码/密码)")
+    if not receiver_str:
+        errors.append("EMAIL_RECEIVER (收件人邮箱)")
+    
+    if errors:
+        print("=" * 60)
+        print("❌ 错误: 缺少必要的环境变量")
+        print("=" * 60)
+        print(f"\n缺失的环境变量: {', '.join(errors)}")
+        print("\n请设置以下环境变量:")
+        print("  export EMAIL_USER='your-email@example.com'")
+        print("  export EMAIL_PASSWORD='your-password-or-app-token'")
+        print("  export EMAIL_RECEIVER='receiver1@example.com,receiver2@example.com'")
+        print("\n提示:")
+        print("  - EMAIL_RECEIVER 支持多个收件人，用 ',' ';' 或空格分隔")
+        print("  - QQ邮箱需要使用授权码，而非登录密码")
+        print("  - Gmail 需要使用应用专用密码")
+        print("=" * 60)
+        return None, None, None
+    
+    # 解析收件人
+    receivers = parse_email_receivers(receiver_str)
+    
+    if not receivers:
+        print("=" * 60)
+        print("❌ 错误: 没有有效的收件人邮箱")
+        print("=" * 60)
+        print(f"\n环境变量 EMAIL_RECEIVER 的值: '{receiver_str}'")
+        print("请检查邮箱地址格式是否正确")
+        print("=" * 60)
+        return None, None, None
+    
+    return user, password, receivers
+
+
 def send_email(html_content):
-    """发送邮件，返回是否成功"""
-    print("正在发送邮件...")
+    """
+    发送邮件，支持多收件人
+    
+    Args:
+        html_content: HTML 格式的邮件内容
+    
+    Returns:
+        bool: 是否发送成功
+    """
+    print("正在准备发送邮件...")
+    
+    # 获取凭证
+    user, password, receivers = get_email_credentials()
+    if not user or not receivers:
+        return False
+    
+    # 自动获取 SMTP 配置
+    smtp_host, smtp_port = get_smtp_config(user)
+    
+    # 构建邮件主题
+    subject = f"{config['email_settings']['subject']} ({datetime.now().strftime('%Y-%m-%d')})"
+    
+    print(f"  发件人: {user}")
+    print(f"  收件人: {', '.join(receivers)}")
+    print(f"  SMTP: {smtp_host}:{smtp_port}")
+    
     try:
-        user = os.environ["EMAIL_USER"]
-        password = os.environ["EMAIL_PASSWORD"]
-        receiver = config['email_settings']['receiver']
-        subject = f"{config['email_settings']['subject']} ({datetime.now().strftime('%Y-%m-%d')})"
-        smtp_host = config['email_settings'].get('smtp_host', 'smtp.gmail.com')
-        smtp_port = config['email_settings'].get('smtp_port', 465)  # QQ邮箱默认465
-        
         yag = yagmail.SMTP(user=user, password=password, host=smtp_host, port=smtp_port)
         yag.send(
-            to=receiver,
+            to=receivers,
             subject=subject,
-            contents=[html_content] # yagmail 自动识别 HTML
+            contents=[html_content]
         )
-        print("邮件发送成功！")
+        print(f"  ✅ 邮件发送成功！共 {len(receivers)} 个收件人")
         return True
     except Exception as e:
-        print(f"邮件发送失败: {e}")
+        print(f"  ❌ 邮件发送失败: {e}")
         return False
 
 # 主程序

@@ -1,9 +1,11 @@
 # 邮件设置
+# 注意：发件人、密码、收件人均从环境变量读取：
+#   - EMAIL_USER: 发件人邮箱
+#   - EMAIL_PASSWORD: 邮箱授权码/密码
+#   - EMAIL_RECEIVER: 收件人邮箱（支持多个，用 ',' ';' 或空格分隔）
+# SMTP 配置会根据发件人邮箱自动选择
 email_settings:
-  subject: "🤖 AI 每日早报 - Gemini 严选"
-  receiver: "tiancheng-liu@qq.com"  # <--- 请修改这里为您的接收邮箱
-  smtp_host: "smtp.qq.com"  # QQ邮箱: smtp.qq.com, Gmail: smtp.gmail.com, 163: smtp.163.com
-  smtp_port: 465  # QQ/163邮箱: 465(SSL), Gmail: 587(TLS)
+  subject: "🤖 AI 每日早报"
 
 # Gemini 模型设置
 gemini:
