@@ -1,4 +1,4 @@
-# Copyright 2024 Daily AI News Project
+# Copyright 2026 Daily AI News Project
 # Licensed under the MIT License
 
 """
