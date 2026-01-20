@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 测试 4: 单个 RSS 源抓取
-测试 fetch_single_feed 函数
+测试 fetch_single_feed_structured 函数
 """
 
 import sys
@@ -12,7 +12,7 @@ import yaml
 # 添加父目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from main import fetch_single_feed
+from main import fetch_single_feed_structured
 
 def test_single_feed():
     """测试单个 RSS 源抓取"""
@@ -42,23 +42,31 @@ def test_single_feed():
     print("\n" + "-" * 60)
     
     try:
-        result = fetch_single_feed(feed_conf, retry_count=2)
+        result = fetch_single_feed_structured(feed_conf, config, retry_count=2)
         
-        if result:
+        if result and result.get('items'):
             print("\n" + "-" * 60)
             print("✅ 抓取成功")
-            print(f"\n内容长度: {len(result)} 字符")
-            print(f"\n前 800 字符预览:")
+            print(f"\n来源: {result.get('source', 'N/A')}")
+            print(f"条目数: {len(result['items'])}")
+            
+            # 显示前几条
+            print("\n前 3 条新闻预览:")
             print("=" * 60)
-            print(result[:800])
+            for i, item in enumerate(result['items'][:3]):
+                print(f"\n[{i+1}] 标题: {item.get('title', 'N/A')}")
+                print(f"    链接: {item.get('link', 'N/A')[:80]}...")
+                summary = item.get('summary', 'N/A')
+                print(f"    摘要: {summary[:100]}..." if len(summary) > 100 else f"    摘要: {summary}")
             print("=" * 60)
             
             # 验证内容质量
             checks = []
-            checks.append(("包含来源标记", "来源：" in result))
-            checks.append(("包含标题", "标题:" in result))
-            checks.append(("包含链接", "链接:" in result or "http" in result))
-            checks.append(("内容长度合理", len(result) > 100))
+            checks.append(("包含来源信息", bool(result.get('source'))))
+            checks.append(("包含新闻条目", len(result.get('items', [])) > 0))
+            first_item = result['items'][0] if result['items'] else {}
+            checks.append(("条目包含标题", bool(first_item.get('title'))))
+            checks.append(("条目包含链接", bool(first_item.get('link'))))
             
             print("\n内容质量检查:")
             all_passed = True
@@ -81,7 +89,7 @@ def test_single_feed():
             print("\n可能的原因:")
             print("  1. 网络连接问题")
             print("  2. RSS 源暂时不可用")
-            print("  3. 内容被过滤（日期/验证）")
+            print("  3. 内容被过滤（日期/关键词）")
             return False
             
     except Exception as e:

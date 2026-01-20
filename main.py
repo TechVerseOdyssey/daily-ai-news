@@ -8,7 +8,6 @@ import time
 from bs4 import BeautifulSoup
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from urllib.parse import urlparse
 import html
 import re
 import json
@@ -16,11 +15,39 @@ import hashlib
 from email_template import generate_basic_html, wrap_with_ai_summary
 
 # 1. 加载配置
-with open('config.yaml', 'r', encoding='utf-8') as f:
+def get_config_path():
+    """获取配置文件的绝对路径"""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(script_dir, 'config.yaml')
+
+with open(get_config_path(), 'r', encoding='utf-8') as f:
     config = yaml.safe_load(f)
 
 # 2. 配置 Gemini (使用 google-genai 新版 API)
-client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
+def get_genai_client():
+    """
+    获取 Gemini API 客户端，带有友好的错误提示
+    
+    Returns:
+        genai.Client: Gemini API 客户端
+    
+    Raises:
+        SystemExit: 当环境变量缺失时退出程序
+    """
+    api_key = os.environ.get("GOOGLE_API_KEY")
+    if not api_key:
+        print("=" * 60)
+        print("❌ 错误: 环境变量 GOOGLE_API_KEY 未设置")
+        print("=" * 60)
+        print("\n请设置 GOOGLE_API_KEY 环境变量:")
+        print("  Linux/Mac: export GOOGLE_API_KEY='your-api-key'")
+        print("  Windows:   set GOOGLE_API_KEY=your-api-key")
+        print("\n获取 API Key: https://aistudio.google.com/app/apikey")
+        print("=" * 60)
+        exit(1)
+    return genai.Client(api_key=api_key)
+
+client = get_genai_client()
 
 
 def get_available_model():
@@ -93,19 +120,53 @@ def get_available_model():
         print(f"  使用默认模型: {fallback}")
         return fallback
 
-# 3. 请求头配置 - 模拟真实浏览器
+# 3. 请求头配置 - 模拟美国浏览器客户端
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Accept': 'application/rss+xml, application/xml, application/atom+xml, text/xml, */*',
-    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
     'Accept-Encoding': 'gzip, deflate',
     'Connection': 'keep-alive',
-    'Cache-Control': 'max-age=0'
+    'Cache-Control': 'max-age=0',
+    'X-Timezone': 'America/New_York',
+    'Sec-CH-UA-Platform': '"macOS"',
+    'Sec-CH-UA': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"'
 }
 
-# 4. 缓存目录
-CACHE_DIR = '.cache'
-os.makedirs(CACHE_DIR, exist_ok=True)
+# 4. 缓存目录初始化
+def init_cache_dir():
+    """
+    初始化缓存目录，按优先级尝试多个位置
+    
+    Returns:
+        str or None: 可用的缓存目录路径，如果都不可用返回 None
+    """
+    # 候选缓存目录（按优先级排序）
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(script_dir, '.cache'),  # 项目目录下的 .cache
+        os.path.join(os.path.expanduser('~'), '.daily-ai-news-cache'),  # 用户主目录
+        os.path.join(os.environ.get('TMPDIR', '/tmp'), 'daily-ai-news-cache'),  # 临时目录
+    ]
+    
+    for cache_dir in candidates:
+        try:
+            os.makedirs(cache_dir, exist_ok=True)
+            # 测试写入权限
+            test_file = os.path.join(cache_dir, '.write_test')
+            with open(test_file, 'w') as f:
+                f.write('test')
+            os.remove(test_file)
+            return cache_dir
+        except (OSError, PermissionError, IOError):
+            continue
+    
+    # 所有候选目录都不可用
+    print("  ⚠️  警告: 无法创建缓存目录，缓存功能已禁用")
+    return None
+
+CACHE_DIR = init_cache_dir()
+CACHE_ENABLED = CACHE_DIR is not None
 
 
 def clean_html_content(html_text):
@@ -178,6 +239,97 @@ def validate_item_content(title, link, description):
             return False
     
     return True
+
+
+def calculate_keyword_score(title, summary):
+    """
+    计算文章的关键词相关度分数
+    
+    Args:
+        title: 文章标题
+        summary: 文章摘要
+    
+    Returns:
+        int: 关键词相关度分数（越高越相关）
+    """
+    text = f"{title} {summary}".lower()
+    score = 0
+    
+    # 从配置读取关键词权重
+    keyword_weights = config.get('keyword_weights', [])
+    
+    if not keyword_weights:
+        # 默认关键词权重（如果配置中没有）
+        keyword_weights = [
+            {'keywords': ['GPT-5', 'GPT-4', 'Claude', 'Gemini', 'OpenAI', 'Anthropic', 'AGI'], 'weight': 10},
+            {'keywords': ['LLM', 'ChatGPT', 'GPT', '大模型', 'Large Language Model'], 'weight': 8},
+            {'keywords': ['Transformer', 'RLHF', 'RAG', 'Fine-tuning', 'Prompt', 'Agent'], 'weight': 6},
+            {'keywords': ['Neural Network', 'Deep Learning', 'Machine Learning', 'NLP'], 'weight': 4},
+            {'keywords': ['AI', 'Artificial Intelligence', 'ML', 'Research'], 'weight': 2},
+        ]
+    
+    for group in keyword_weights:
+        keywords = group.get('keywords', [])
+        weight = group.get('weight', 1)
+        for keyword in keywords:
+            if keyword.lower() in text:
+                score += weight
+    
+    return score
+
+
+def sort_and_limit_items(sources_data, max_total_items=100):
+    """
+    对所有文章按关键词相关度排序，并限制总数量
+    
+    Args:
+        sources_data: 原始数据源列表
+        max_total_items: 最大文章总数
+    
+    Returns:
+        list: 排序并限制后的数据源列表
+    """
+    # 1. 收集所有文章并计算分数
+    all_items = []
+    for source in sources_data:
+        source_name = source['source']
+        for item in source['items']:
+            score = calculate_keyword_score(item['title'], item['summary'])
+            all_items.append({
+                'source': source_name,
+                'item': item,
+                'score': score
+            })
+    
+    # 2. 按分数降序排序
+    all_items.sort(key=lambda x: x['score'], reverse=True)
+    
+    # 3. 限制总数量
+    if len(all_items) > max_total_items:
+        print(f"  ⚠️  文章数量 ({len(all_items)}) 超过上限 ({max_total_items})，已截取前 {max_total_items} 条")
+        all_items = all_items[:max_total_items]
+    
+    # 4. 重新按数据源分组
+    source_items_map = {}
+    for entry in all_items:
+        source_name = entry['source']
+        if source_name not in source_items_map:
+            source_items_map[source_name] = []
+        source_items_map[source_name].append(entry['item'])
+    
+    # 5. 转换回原格式，保持分数高的源在前面
+    result = []
+    seen_sources = set()
+    for entry in all_items:
+        source_name = entry['source']
+        if source_name not in seen_sources:
+            seen_sources.add(source_name)
+            result.append({
+                'source': source_name,
+                'items': source_items_map[source_name]
+            })
+    
+    return result
 
 
 def is_content_fresh(item, hours=24):
@@ -262,11 +414,15 @@ def save_cache(cache_key, data):
         cache_key: 缓存键
         data: 要缓存的数据
     """
+    if not CACHE_ENABLED:
+        return
+    
     try:
         cache_file = os.path.join(CACHE_DIR, f"{cache_key}.json")
         with open(cache_file, 'w', encoding='utf-8') as f:
             json.dump({
-                'timestamp': datetime.now().isoformat(),
+                # 使用 UTC 时间戳确保跨时区一致性
+                'timestamp': datetime.now(timezone.utc).isoformat(),
                 'data': data
             }, f, ensure_ascii=False, indent=2)
     except Exception as e:
@@ -284,6 +440,9 @@ def load_cache(cache_key, max_age_hours=24):
     Returns:
         缓存的数据，如果不存在或过期返回 None
     """
+    if not CACHE_ENABLED:
+        return None
+    
     try:
         cache_file = os.path.join(CACHE_DIR, f"{cache_key}.json")
         if not os.path.exists(cache_file):
@@ -292,9 +451,15 @@ def load_cache(cache_key, max_age_hours=24):
         with open(cache_file, 'r', encoding='utf-8') as f:
             cache_data = json.load(f)
         
-        # 检查缓存是否过期
-        cache_time = datetime.fromisoformat(cache_data['timestamp'])
-        now = datetime.now()
+        # 检查缓存是否过期（使用 UTC 时间确保跨时区一致性）
+        cache_time_str = cache_data['timestamp']
+        # 兼容旧缓存（无时区信息）和新缓存（有时区信息）
+        cache_time = datetime.fromisoformat(cache_time_str)
+        if cache_time.tzinfo is None:
+            # 旧缓存没有时区信息，假设为本地时间并转换为 UTC
+            cache_time = cache_time.replace(tzinfo=timezone.utc)
+        
+        now = datetime.now(timezone.utc)
         if (now - cache_time).total_seconds() > max_age_hours * 3600:
             return None
         
@@ -315,9 +480,15 @@ def fetch_single_feed_structured(feed_conf, retry_count=3):
     max_items = feed_conf.get('max_items', 3)
     is_arxiv = feed_conf.get('type') == 'arxiv' or 'arxiv' in feed_url.lower()
     
+    # 从配置读取超时和缓存设置
+    crawler_settings = config.get('crawler_settings', {})
+    connect_timeout = crawler_settings.get('connect_timeout', 10)
+    read_timeout = crawler_settings.get('read_timeout', 30)
+    cache_max_age = crawler_settings.get('cache_max_age_hours', 6)
+    
     # 检查缓存
     cache_key = hashlib.md5(feed_url.encode()).hexdigest()
-    cached_data = load_cache(cache_key + '_structured', max_age_hours=6)
+    cached_data = load_cache(cache_key + '_structured', max_age_hours=cache_max_age)
     if cached_data:
         print(f"  📦 {feed_name} 使用缓存数据")
         return cached_data
@@ -333,7 +504,7 @@ def fetch_single_feed_structured(feed_conf, retry_count=3):
             response = requests.get(
                 feed_url, 
                 headers=HEADERS,
-                timeout=(10, 30),
+                timeout=(connect_timeout, read_timeout),
                 allow_redirects=True
             )
             response.raise_for_status()
@@ -440,9 +611,8 @@ def fetch_feeds():
     all_sources = []
     feeds_config = config['feeds']
     
-    # 获取配置的并发数和速率限制
+    # 获取配置的并发数（速率限制通过控制 max_workers 实现）
     max_workers = config.get('crawler_settings', {}).get('max_workers', 5)
-    rate_limit = config.get('crawler_settings', {}).get('rate_limit_seconds', 0.5)
     
     # 使用线程池并发抓取
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -453,17 +623,12 @@ def fetch_feeds():
         }
         
         # 处理完成的任务
-        for i, future in enumerate(as_completed(future_to_feed)):
+        for future in as_completed(future_to_feed):
             feed_conf = future_to_feed[future]
             try:
                 result = future.result()
                 if result and result['items']:
                     all_sources.append(result)
-                
-                # 速率限制：每抓取完一个源，等待一段时间（避免过快请求）
-                if i < len(feeds_config) - 1:  # 最后一个不需要等待
-                    time.sleep(rate_limit)
-                    
             except Exception as e:
                 print(f"  ✗ {feed_conf['name']} 处理失败: {str(e)}")
     
@@ -574,29 +739,45 @@ if __name__ == "__main__":
         print("\n❌ 没有抓取到任何数据，终止运行。")
         exit(1)
     
-    total_items = sum(len(source['items']) for source in sources_data)
-    print(f"\n📊 数据统计: {len(sources_data)} 个数据源，共 {total_items} 条新闻")
+    total_items_before = sum(len(source['items']) for source in sources_data)
+    print(f"\n📊 原始数据: {len(sources_data)} 个数据源，共 {total_items_before} 条新闻")
     
-    # 2. 生成基础 HTML 内容（必须成功，作为后备）
+    # 2. 按关键词相关度排序并限制总数量
+    max_total_items = config.get('crawler_settings', {}).get('max_total_items', 100)
+    print(f"\n🔄 正在按关键词相关度排序（上限 {max_total_items} 条）...")
+    sources_data = sort_and_limit_items(sources_data, max_total_items)
+    
+    total_items_after = sum(len(source['items']) for source in sources_data)
+    print(f"  ✅ 排序完成: {len(sources_data)} 个数据源，共 {total_items_after} 条新闻")
+    
+    # 3. 生成基础 HTML 内容（必须成功，作为后备）
     print("\n正在生成基础 HTML 内容...")
-    basic_html = generate_basic_html(sources_data)
+    freshness_hours = config.get('crawler_settings', {}).get('content_freshness_hours', 24)
+    basic_html = generate_basic_html(sources_data, freshness_hours=freshness_hours)
     print("  ✅ 基础内容生成成功")
     
-    # 3. 尝试用 AI 增强内容（等待结果，但失败不终止）
-    print("\n正在尝试使用 AI 生成智能总结...")
-    print("  ⏳ 等待大模型响应（这可能需要10-30秒）...")
-    ai_summary = try_enhance_with_ai(sources_data)
+    # 4. 尝试用 AI 增强内容（根据配置决定是否启用）
+    enable_ai_summary = config.get('gemini', {}).get('enable_ai_summary', True)
+    ai_summary = None
     
-    # 4. 准备最终邮件内容
+    if enable_ai_summary:
+        print("\n正在尝试使用 AI 生成智能总结...")
+        print("  ⏳ 等待大模型响应（这可能需要10-30秒）...")
+        ai_summary = try_enhance_with_ai(sources_data)
+    else:
+        print("\n⏭️  AI 总结已禁用（可在 config.yaml 中设置 enable_ai_summary: true 启用）")
+    
+    # 5. 准备最终邮件内容
     if ai_summary:
         # 如果有 AI 总结，使用模板包装
         final_html = wrap_with_ai_summary(basic_html, ai_summary)
         print("  ✅ AI 总结生成成功，将使用增强版邮件")
     else:
         final_html = basic_html
-        print("  ⚠️  AI 总结生成失败，将使用基础版邮件（仍包含完整内容）")
+        if enable_ai_summary:
+            print("  ⚠️  AI 总结生成失败，将使用基础版邮件（仍包含完整内容）")
     
-    # 5. 发送邮件（必须成功）
+    # 6. 发送邮件（必须成功）
     print("\n开始发送邮件...")
     email_sent = send_email(final_html)
     

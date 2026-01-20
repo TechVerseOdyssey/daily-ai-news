@@ -6,12 +6,30 @@
 from datetime import datetime
 
 
-def generate_basic_html(sources_data):
+def format_freshness_label(hours):
+    """
+    将小时数格式化为易读的时效性标签
+    
+    Args:
+        hours: 小时数
+    
+    Returns:
+        str: 格式化后的标签，如 "24h"、"7天"
+    """
+    if hours <= 48:
+        return f"{hours}h"
+    else:
+        days = hours // 24
+        return f"{days}天"
+
+
+def generate_basic_html(sources_data, freshness_hours=24):
     """
     生成基础 HTML 邮件内容（不依赖大模型）
     
     Args:
         sources_data: list of dict, [{'source': '...', 'items': [{'title': '...', 'link': '...', 'summary': '...'}]}]
+        freshness_hours: int, 内容时效性（小时数），用于显示在统计栏
     
     Returns:
         str: HTML 格式的邮件内容
@@ -33,7 +51,8 @@ def generate_basic_html(sources_data):
     html_parts.append(f'<table style="width:100%;background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%);color:#fff;" cellpadding="0" cellspacing="0"><tr>')
     html_parts.append(f'<td style="width:33%;text-align:center;padding:10px 5px;"><b style="font-size:20px;">{len(sources_data)}</b><div style="font-size:11px;opacity:0.9;">数据源</div></td>')
     html_parts.append(f'<td style="width:34%;text-align:center;padding:10px 5px;border-left:1px solid rgba(255,255,255,0.2);border-right:1px solid rgba(255,255,255,0.2);"><b style="font-size:20px;">{total_news}</b><div style="font-size:11px;opacity:0.9;">新闻条数</div></td>')
-    html_parts.append(f'<td style="width:33%;text-align:center;padding:10px 5px;"><b style="font-size:20px;">24h</b><div style="font-size:11px;opacity:0.9;">时效性</div></td>')
+    freshness_label = format_freshness_label(freshness_hours)
+    html_parts.append(f'<td style="width:33%;text-align:center;padding:10px 5px;"><b style="font-size:20px;">{freshness_label}</b><div style="font-size:11px;opacity:0.9;">时效性</div></td>')
     html_parts.append(f'</tr></table>')
     # 内容区域
     html_parts.append(f'<div style="padding:12px 16px;">')
@@ -98,11 +117,17 @@ def wrap_with_ai_summary(basic_html, ai_summary):
     if body_start == -1:
         return basic_html
     
+    # 对 AI 生成的内容进行 HTML 转义，防止 XSS 和布局破坏
+    import html as html_module
+    safe_ai_summary = html_module.escape(ai_summary)
+    # 保留换行格式
+    safe_ai_summary = safe_ai_summary.replace('\n', '<br>')
+    
     # 构建 AI 增强版邮件：在内容区域前插入AI总结（紧凑格式）
     ai_summary_html = '<div style="background:linear-gradient(135deg,#fff3e0,#ffe0b2);padding:12px 16px;border-bottom:1px solid #ffcc80;">'
     ai_summary_html += '<div style="margin-bottom:8px;"><span style="display:inline-block;width:20px;height:20px;background:#ff9800;border-radius:4px;text-align:center;line-height:20px;font-size:10px;margin-right:6px;vertical-align:middle;">✨</span>'
     ai_summary_html += '<span style="color:#e65100;font-size:14px;font-weight:600;vertical-align:middle;">AI 智能总结</span></div>'
-    ai_summary_html += f'<div style="background:rgba(255,255,255,0.9);padding:10px;border-radius:6px;color:#333;line-height:1.6;font-size:13px;">{ai_summary}</div></div>'
+    ai_summary_html += f'<div style="background:rgba(255,255,255,0.9);padding:10px;border-radius:6px;color:#333;line-height:1.6;font-size:13px;">{safe_ai_summary}</div></div>'
     
     enhanced_html = basic_html[:body_start] + ai_summary_html + basic_html[body_start:]
     

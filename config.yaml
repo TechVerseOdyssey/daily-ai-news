@@ -10,6 +10,7 @@ gemini:
   # 优先使用的模型名称（如果不可用，会自动选择其他免费模型）
   # 常用: gemini-2.0-flash, gemini-1.5-flash, gemini-1.5-pro
   model_name: "gemini-2.0-flash"
+  enable_ai_summary: false  # 是否启用 AI 智能总结（true: 启用, false: 禁用）
 
 # 爬虫设置（专业级配置）
 crawler_settings:
@@ -18,24 +19,44 @@ crawler_settings:
   retry_count: 3  # 失败重试次数
   connect_timeout: 10  # 连接超时（秒）
   read_timeout: 30  # 读取超时（秒）
-  content_freshness_hours: 24  # 内容新鲜度（小时），只抓取N小时内的内容（24小时=1天）
+  content_freshness_hours: 168  # 内容新鲜度（小时），只抓取N小时内的内容（168小时=7天）
+  cache_max_age_hours: 6  # 缓存有效期（小时），缓存过期后重新抓取
+  max_total_items: 100  # 单次抓取总文章上限
+
+# 关键词权重配置（用于文章排序，权重越高越靠前）
+keyword_weights:
+  # 顶级热门（权重 10）
+  - keywords: ["GPT-5", "GPT-4", "Claude", "Gemini", "OpenAI", "Anthropic", "AGI", "Agent", "智能体", "Agentic", "Vibe Coding", "Vibe-Coding"]
+    weight: 10
+  # 高热度（权重 8）
+  - keywords: ["LLM", "ChatGPT", "GPT", "大模型", "Large Language Model", "Foundation Model", "AI Agent", "Multi-Agent", "自主智能体", "Cursor", "Copilot", "AI Coding", "Code Generation"]
+    weight: 8
+  # 中高热度（权重 6）
+  - keywords: ["Transformer", "RLHF", "RAG", "Fine-tuning", "Prompt", "Multi-modal", "Tool Use", "Function Calling", "ReAct", "AutoGPT", "Code Assistant", "AI编程"]
+    weight: 6
+  # 中等热度（权重 4）
+  - keywords: ["Neural Network", "Deep Learning", "Machine Learning", "NLP", "Computer Vision"]
+    weight: 4
+  # 基础热度（权重 2）
+  - keywords: ["AI", "Artificial Intelligence", "ML", "Research", "Paper"]
+    weight: 2
 
 # 数据源 (RSS/Atom)
 feeds:
   - name: "OpenAI Blog"
     url: "https://openai.com/blog/rss.xml"
-    max_items: 3
+    max_items: 5
 
   - name: "Google AI Blog"
     url: "http://googleaiblog.blogspot.com/atom.xml"
-    max_items: 5
+    max_items: 10
     # Google 博客更新频率较低，给予更宽松的时间窗口
     custom_freshness_hours: 168  # 7天，覆盖全局的 24 小时设置
 
   - name: "Arxiv AI (CS.AI)"
     url: "http://export.arxiv.org/api/query?search_query=cat:cs.AI&sortBy=submittedDate&sortOrder=descending&max_results=5"
     type: "arxiv"
-    max_items: 5
+    max_items: 10
 
   - name: "MIT News - Artificial Intelligence"
     url: "https://news.mit.edu/rss/topic/artificial-intelligence2"
