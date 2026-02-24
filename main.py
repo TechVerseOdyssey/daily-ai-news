@@ -44,9 +44,9 @@ def main():
     # 1. 抓取数据（结构化）
     sources_data = fetcher.fetch_all()
     
-    if not sources_data or len(sources_data) == 0:
+    if not sources_data:
         print("\n❌ 没有抓取到任何数据，终止运行。")
-        exit(1)
+        raise SystemExit(1)
     
     total_items_before = sum(len(source['items']) for source in sources_data)
     print(f"\n📊 原始数据: {len(sources_data)} 个数据源，共 {total_items_before} 条新闻")
@@ -93,7 +93,7 @@ def main():
         print("\n" + "=" * 60)
         print("❌ 邮件发送失败！")
         print("=" * 60)
-        exit(1)
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

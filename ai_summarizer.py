@@ -25,6 +25,7 @@ class AISummarizer:
         self.config = config
         self.client = None
         self._initialized = False
+        self._cached_model_name = None
     
     def _ensure_client(self):
         """确保 Gemini 客户端已初始化"""
@@ -66,11 +67,14 @@ class AISummarizer:
     
     def _get_available_model(self):
         """
-        获取可用的免费 Gemini 模型
+        获取可用的免费 Gemini 模型（带缓存，避免重复查询）
         
         Returns:
             str: 可用的模型名称
         """
+        if self._cached_model_name:
+            return self._cached_model_name
+        
         preferred_models = [
             'gemini-2.0-flash',
             'gemini-1.5-flash',
@@ -97,20 +101,24 @@ class AISummarizer:
             for preferred in preferred_models:
                 if preferred in available_models:
                     print(f"  ✓ 选择模型: {preferred}")
+                    self._cached_model_name = preferred
                     return preferred
                 for available in available_models:
                     if available.startswith(preferred):
                         print(f"  ✓ 选择模型: {available}")
+                        self._cached_model_name = available
                         return available
             
             for available in available_models:
                 if 'flash' in available.lower():
                     print(f"  ✓ 选择模型: {available}")
+                    self._cached_model_name = available
                     return available
             
             for available in available_models:
                 if 'gemini' in available.lower():
                     print(f"  ✓ 选择模型: {available}")
+                    self._cached_model_name = available
                     return available
             
             print(f"  ⚠ 未找到可用模型，使用配置默认值: {config_model}")
@@ -149,7 +157,11 @@ class AISummarizer:
             try:
                 print("尝试使用备用 API 格式 (google-generativeai)...")
                 import google.generativeai as genai_old
-                genai_old.configure(api_key=os.environ["GOOGLE_API_KEY"])
+                api_key = os.environ.get("GOOGLE_API_KEY")
+                if not api_key:
+                    print("备用方法失败: GOOGLE_API_KEY 环境变量未设置")
+                    return None
+                genai_old.configure(api_key=api_key)
                 backup_model = genai_old.GenerativeModel(model_name)
                 backup_response = backup_model.generate_content(full_prompt)
                 return backup_response.text

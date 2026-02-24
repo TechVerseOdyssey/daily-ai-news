@@ -3,7 +3,53 @@
 负责生成美观的 HTML 邮件内容
 """
 
+import re
 from datetime import datetime
+
+# AI 总结内容中允许保留的安全 HTML 标签
+_ALLOWED_TAGS = {'h3', 'h4', 'ul', 'ol', 'li', 'b', 'strong', 'i', 'em', 'a', 'br', 'p', 'span', 'div'}
+
+
+def sanitize_ai_html(html_content):
+    """
+    对 AI 生成的 HTML 内容进行安全清理：
+    - 保留白名单内的安全标签
+    - 移除危险标签（script, style, iframe 等）
+    - 对 <a> 标签只保留 href 属性
+    
+    Args:
+        html_content: AI 生成的 HTML 字符串
+    
+    Returns:
+        str: 清理后的安全 HTML
+    """
+    if not html_content:
+        return ""
+    
+    # 移除危险标签及其内容
+    for tag in ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input']:
+        html_content = re.sub(
+            rf'<{tag}[^>]*>.*?</{tag}>', '', html_content, flags=re.DOTALL | re.IGNORECASE
+        )
+        html_content = re.sub(rf'<{tag}[^>]*/?\s*>', '', html_content, flags=re.IGNORECASE)
+    
+    # 移除事件属性 (on*)
+    html_content = re.sub(r'\s+on\w+\s*=\s*["\'][^"\']*["\']', '', html_content, flags=re.IGNORECASE)
+    html_content = re.sub(r'\s+on\w+\s*=\s*\S+', '', html_content, flags=re.IGNORECASE)
+    
+    # 移除 javascript: 协议
+    html_content = re.sub(r'href\s*=\s*["\']javascript:[^"\']*["\']', 'href="#"', html_content, flags=re.IGNORECASE)
+    
+    # 处理非白名单标签：移除标签但保留内容
+    def replace_tag(match):
+        tag_name = match.group(1).lower().strip('/')
+        if tag_name in _ALLOWED_TAGS:
+            return match.group(0)
+        return ''
+    
+    html_content = re.sub(r'<(/?\s*\w+)[^>]*/?>', replace_tag, html_content)
+    
+    return html_content
 
 
 def format_freshness_label(hours):
@@ -54,8 +100,8 @@ def generate_basic_html(sources_data, freshness_hours=24):
     freshness_label = format_freshness_label(freshness_hours)
     html_parts.append(f'<td style="width:33%;text-align:center;padding:10px 5px;"><b style="font-size:20px;">{freshness_label}</b><div style="font-size:11px;opacity:0.9;">时效性</div></td>')
     html_parts.append(f'</tr></table>')
-    # 内容区域
-    html_parts.append(f'<div style="padding:12px 16px;">')
+    # 内容区域（使用唯一标记便于 wrap_with_ai_summary 定位）
+    html_parts.append(f'<!-- CONTENT_START --><div style="padding:12px 16px;">')
     
     # 数据源图标映射
     source_icons = {
@@ -110,18 +156,20 @@ def wrap_with_ai_summary(basic_html, ai_summary):
     Returns:
         str: 包含 AI 总结的完整 HTML 邮件
     """
-    # 查找内容区域的开始位置
-    content_marker = '<div style="padding:12px 16px;">'
+    # 使用唯一标记定位内容区域，避免依赖具体样式字符串
+    content_marker = '<!-- CONTENT_START -->'
     body_start = basic_html.find(content_marker)
+    
+    if body_start == -1:
+        # 兼容回退：尝试旧的样式字符串定位
+        content_marker = '<div style="padding:12px 16px;">'
+        body_start = basic_html.find(content_marker)
     
     if body_start == -1:
         return basic_html
     
-    # 对 AI 生成的内容进行 HTML 转义，防止 XSS 和布局破坏
-    import html as html_module
-    safe_ai_summary = html_module.escape(ai_summary)
-    # 保留换行格式
-    safe_ai_summary = safe_ai_summary.replace('\n', '<br>')
+    # 对 AI 生成的 HTML 进行安全清理（保留安全标签，移除危险内容）
+    safe_ai_summary = sanitize_ai_html(ai_summary)
     
     # 构建 AI 增强版邮件：在内容区域前插入AI总结（紧凑格式）
     ai_summary_html = '<div style="background:linear-gradient(135deg,#fff3e0,#ffe0b2);padding:12px 16px;border-bottom:1px solid #ffcc80;">'

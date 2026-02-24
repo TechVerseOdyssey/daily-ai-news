@@ -201,6 +201,7 @@ class EmailSender:
         print(f"  收件人: {', '.join(receivers)}")
         print(f"  SMTP: {smtp_host}:{smtp_port}")
         
+        yag = None
         try:
             yag = yagmail.SMTP(user=user, password=password, host=smtp_host, port=smtp_port)
             yag.send(
@@ -213,3 +214,9 @@ class EmailSender:
         except Exception as e:
             print(f"  ❌ 邮件发送失败: {e}")
             return False
+        finally:
+            if yag:
+                try:
+                    yag.close()
+                except Exception:
+                    pass

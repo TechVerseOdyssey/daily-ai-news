@@ -12,6 +12,7 @@ import json
 import html
 import time
 import hashlib
+import threading
 import requests
 import feedparser
 from datetime import datetime, timezone
@@ -46,6 +47,9 @@ class NewsFetcher:
         self.config = config
         self.cache_dir = self._init_cache_dir()
         self.cache_enabled = self.cache_dir is not None
+        # 速率限制锁，用于控制并发请求间隔
+        self._rate_lock = threading.Lock()
+        self._last_request_time = 0.0
     
     def _init_cache_dir(self):
         """
@@ -318,7 +322,17 @@ class NewsFetcher:
         
         return result
     
-    def _fetch_single_feed(self, feed_conf, retry_count=3):
+    def _rate_limit_wait(self):
+        """在发起请求前等待，确保请求间隔满足速率限制"""
+        rate_limit = self.config.get('crawler_settings', {}).get('rate_limit_seconds', 0.5)
+        with self._rate_lock:
+            now = time.monotonic()
+            elapsed = now - self._last_request_time
+            if elapsed < rate_limit:
+                time.sleep(rate_limit - elapsed)
+            self._last_request_time = time.monotonic()
+
+    def _fetch_single_feed(self, feed_conf):
         """
         抓取单个 RSS 源并返回结构化数据
         
@@ -334,8 +348,9 @@ class NewsFetcher:
         connect_timeout = crawler_settings.get('connect_timeout', 10)
         read_timeout = crawler_settings.get('read_timeout', 30)
         cache_max_age = crawler_settings.get('cache_max_age_hours', 6)
+        retry_count = crawler_settings.get('retry_count', 3)
         
-        cache_key = hashlib.md5(feed_url.encode()).hexdigest()
+        cache_key = hashlib.md5(f"{feed_url}|max_items={max_items}".encode()).hexdigest()
         cached_data = self._load_cache(cache_key + '_structured', max_age_hours=cache_max_age)
         if cached_data:
             print(f"  📦 {feed_name} 使用缓存数据")
@@ -349,6 +364,7 @@ class NewsFetcher:
                     time.sleep(wait_time)
                 
                 print(f"正在抓取: {feed_name}...")
+                self._rate_limit_wait()
                 response = requests.get(
                     feed_url,
                     headers=HEADERS,
