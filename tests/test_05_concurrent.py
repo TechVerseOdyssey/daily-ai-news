@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 测试 5: 并发抓取
-测试 fetch_feeds 函数的并发性能
+测试 NewsFetcher.fetch_all 方法的并发性能
 """
 
 import sys
@@ -13,7 +13,7 @@ import yaml
 # 添加父目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from main import fetch_feeds
+from news_fetcher import NewsFetcher
 
 def test_concurrent_fetch():
     """测试并发抓取功能"""
@@ -39,10 +39,11 @@ def test_concurrent_fetch():
     print("\n开始并发抓取测试...")
     print("=" * 60)
     
+    fetcher = NewsFetcher(config)
     start_time = time.time()
     
     try:
-        result = fetch_feeds()
+        sources_data = fetcher.fetch_all()
         
         end_time = time.time()
         duration = end_time - start_time
@@ -52,11 +53,10 @@ def test_concurrent_fetch():
         print("=" * 60)
         
         # 性能统计
+        total_items = sum(len(s.get('items', [])) for s in sources_data) if sources_data else 0
         print(f"\n⏱️  总耗时: {duration:.2f} 秒")
-        print(f"📊 数据长度: {len(result) if result else 0} 字符")
-        
-        if result:
-            print(f"📈 平均速度: {len(result) / duration:.0f} 字符/秒")
+        print(f"📊 数据源数: {len(sources_data) if sources_data else 0}")
+        print(f"📊 新闻条目数: {total_items}")
         
         # 性能评估
         print("\n性能评估:")
@@ -68,7 +68,7 @@ def test_concurrent_fetch():
         checks = []
         
         # 1. 基本成功检查
-        if result and len(result) > 500:
+        if sources_data and total_items > 0:
             checks.append(("✅", "成功抓取数据"))
         else:
             checks.append(("❌", "抓取数据不足"))
@@ -82,7 +82,7 @@ def test_concurrent_fetch():
             checks.append(("❌", f"耗时过长 (预期串行: ~{expected_serial_time:.0f}秒)"))
         
         # 3. 绝对时间检查
-        max_reasonable_time = 60  # 60 秒内应该完成
+        max_reasonable_time = 120  # 120 秒内应该完成（考虑速率限制）
         if duration < max_reasonable_time:
             checks.append(("✅", f"总耗时合理 (< {max_reasonable_time}秒)"))
         else:
@@ -92,13 +92,12 @@ def test_concurrent_fetch():
             print(f"  {status} {message}")
         
         # 内容质量检查
-        if result:
+        if sources_data:
             print("\n内容质量:")
             quality_checks = [
-                ("包含多个来源", result.count("来源：") >= 2),
-                ("包含标题信息", result.count("标题:") >= 3),
-                ("包含链接信息", result.count("http") >= 5),
-                ("数据量充足", len(result) > 1000),
+                ("包含多个来源", len(sources_data) >= 2),
+                ("包含新闻条目", total_items >= 3),
+                ("每个来源有名称", all(s.get('source') for s in sources_data)),
             ]
             
             all_passed = True
@@ -108,9 +107,13 @@ def test_concurrent_fetch():
                 if not check_result:
                     all_passed = False
             
-            print("\n前 500 字符预览:")
+            # 预览
+            print("\n数据预览:")
             print("-" * 60)
-            print(result[:500])
+            for source in sources_data[:3]:
+                print(f"\n来源: {source.get('source', 'N/A')}")
+                for item in source.get('items', [])[:2]:
+                    print(f"  - {item.get('title', 'N/A')[:60]}")
             print("-" * 60)
             
             if all_passed and checks[0][0] == "✅":

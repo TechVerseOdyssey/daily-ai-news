@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 测试 4: 单个 RSS 源抓取
-测试 fetch_single_feed_structured 函数
+测试 NewsFetcher._fetch_single_feed 方法
 """
 
 import sys
@@ -12,7 +12,7 @@ import yaml
 # 添加父目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from main import fetch_single_feed_structured
+from news_fetcher import NewsFetcher
 
 def test_single_feed():
     """测试单个 RSS 源抓取"""
@@ -32,6 +32,8 @@ def test_single_feed():
         print("❌ 配置文件中没有 RSS 源")
         return False
     
+    fetcher = NewsFetcher(config)
+    
     # 测试第一个 RSS 源
     feed_conf = config['feeds'][0]
     feed_name = feed_conf['name']
@@ -42,7 +44,7 @@ def test_single_feed():
     print("\n" + "-" * 60)
     
     try:
-        result = fetch_single_feed_structured(feed_conf, config, retry_count=2)
+        result = fetcher._fetch_single_feed(feed_conf)
         
         if result and result.get('items'):
             print("\n" + "-" * 60)

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 测试 2: HTML 清理和数据验证
-测试 clean_html_content 和 validate_item_content 函数
+测试 NewsFetcher.clean_html_content 和 NewsFetcher.validate_item_content 静态方法
 """
 
 import sys
@@ -11,7 +11,11 @@ import os
 # 添加父目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from main import clean_html_content, validate_item_content
+from news_fetcher import NewsFetcher
+
+# 使用静态方法引用
+clean_html_content = NewsFetcher.clean_html_content
+validate_item_content = NewsFetcher.validate_item_content
 
 def test_html_cleaning():
     """测试 HTML 清理功能"""
