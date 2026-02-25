@@ -7,12 +7,20 @@
 email_settings:
   subject: "🤖 AI 每日早报"
 
-# Gemini 模型设置
+# AI 总结设置
+ai_summary:
+  enabled: true  # 是否启用 AI 智能总结（true: 启用, false: 禁用）
+
+# OpenRouter 设置（主要 AI 后端）
+# 需要设置环境变量: export OPENROUTER_API_KEY='your-api-key'
+# 获取 API Key: https://openrouter.ai/keys
+openrouter:
+  model: "z-ai/glm-4.5-air:free"  # 免费模型
+
+# Gemini 模型设置（备用 AI 后端）
+# 需要设置环境变量: export GOOGLE_API_KEY='your-api-key'
 gemini:
-  # 优先使用的模型名称（如果不可用，会自动选择其他免费模型）
-  # 常用: gemini-2.0-flash, gemini-1.5-flash, gemini-1.5-pro
   model_name: "gemini-2.0-flash"
-  enable_ai_summary: false  # 是否启用 AI 智能总结（true: 启用, false: 禁用）
 
 # 爬虫设置（专业级配置）
 crawler_settings:
@@ -21,7 +29,7 @@ crawler_settings:
   retry_count: 3  # 失败重试次数
   connect_timeout: 10  # 连接超时（秒）
   read_timeout: 30  # 读取超时（秒）
-  content_freshness_hours: 168  # 内容新鲜度（小时），只抓取N小时内的内容（168小时=7天）
+  content_freshness_hours: 25  # 内容新鲜度（小时），只抓取N小时内的内容（24小时=1天）
   cache_max_age_hours: 6  # 缓存有效期（小时），缓存过期后重新抓取
   max_total_items: 100  # 单次抓取总文章上限
 

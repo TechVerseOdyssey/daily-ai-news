@@ -22,6 +22,7 @@ TESTS = [
     ("缓存机制", "test_03_cache.py", False),
     ("单源抓取", "test_04_fetch_single.py", True),
     ("并发抓取", "test_05_concurrent.py", True),
+    ("AI总结功能", "test_06_ai_summary.py", True),
 ]
 
 
