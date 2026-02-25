@@ -175,7 +175,7 @@ def wrap_with_ai_summary(basic_html, ai_summary):
     ai_summary_html = '<div style="background:linear-gradient(135deg,#fff3e0,#ffe0b2);padding:12px 16px;border-bottom:1px solid #ffcc80;">'
     ai_summary_html += '<div style="margin-bottom:8px;"><span style="display:inline-block;width:20px;height:20px;background:#ff9800;border-radius:4px;text-align:center;line-height:20px;font-size:10px;margin-right:6px;vertical-align:middle;">✨</span>'
     ai_summary_html += '<span style="color:#e65100;font-size:14px;font-weight:600;vertical-align:middle;">AI 智能总结</span></div>'
-    ai_summary_html += f'<div style="background:rgba(255,255,255,0.9);padding:10px;border-radius:6px;color:#333;line-height:1.6;font-size:13px;">{safe_ai_summary}</div></div>'
+    ai_summary_html += f'<div style="background:rgba(255,255,255,0.9);padding:8px 10px;border-radius:6px;color:#333;line-height:1.4;font-size:13px;">{safe_ai_summary}</div></div>'
     
     enhanced_html = basic_html[:body_start] + ai_summary_html + basic_html[body_start:]
     
