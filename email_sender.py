@@ -8,6 +8,8 @@
 
 import os
 import re
+import socket
+import time
 from datetime import datetime
 import yagmail
 
@@ -175,9 +177,69 @@ class EmailSender:
         """
         self.config = config
     
+    def _check_smtp_connectivity(self, smtp_host, smtp_port, timeout=10):
+        """
+        预检测 SMTP 服务器连通性（DNS 解析 + TCP 连接）
+        
+        Returns:
+            tuple: (可达, 错误信息)
+        """
+        try:
+            # 1. DNS 解析检查（强制 IPv4）
+            addr_info = socket.getaddrinfo(smtp_host, smtp_port, socket.AF_INET, socket.SOCK_STREAM)
+            if not addr_info:
+                return False, f"DNS 解析失败: 无法解析 {smtp_host}"
+            
+            ipv4_addr = addr_info[0][4][0]
+            print(f"  📡 DNS 解析: {smtp_host} -> {ipv4_addr}")
+            
+            # 2. TCP 连接检查
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(timeout)
+            try:
+                sock.connect((ipv4_addr, smtp_port))
+                return True, None
+            finally:
+                sock.close()
+                
+        except socket.gaierror as e:
+            return False, f"DNS 解析失败: {e}"
+        except socket.timeout:
+            return False, f"连接超时: {smtp_host}:{smtp_port} ({timeout}s)"
+        except OSError as e:
+            return False, f"网络不可达: {e}"
+
+    def _send_once(self, user, password, smtp_host, smtp_port, receivers, subject, html_content):
+        """
+        单次发送尝试（强制使用 IPv4）
+        
+        Returns:
+            bool: 是否发送成功
+        """
+        # 强制使用 IPv4，避免 IPv6 连通性问题
+        original_getaddrinfo = socket.getaddrinfo
+
+        def ipv4_only_getaddrinfo(*args, **kwargs):
+            responses = original_getaddrinfo(*args, **kwargs)
+            return [r for r in responses if r[0] == socket.AF_INET] or responses
+
+        yag = None
+        try:
+            socket.getaddrinfo = ipv4_only_getaddrinfo
+            yag = yagmail.SMTP(user=user, password=password, host=smtp_host, port=smtp_port)
+            yag.send(to=receivers, subject=subject, contents=[html_content])
+            return True
+        finally:
+            socket.getaddrinfo = original_getaddrinfo
+            if yag:
+                try:
+                    yag.close()
+                except Exception:
+                    pass
+
     def send(self, html_content):
         """
-        发送邮件，支持多收件人
+        发送邮件，支持多收件人，带重试和网络预检
         
         Args:
             html_content: HTML 格式的邮件内容
@@ -185,6 +247,9 @@ class EmailSender:
         Returns:
             bool: 是否发送成功
         """
+        MAX_RETRIES = 3
+        RETRY_BASE_DELAY = 5  # 秒
+
         print("正在准备发送邮件...")
         
         user, password, receivers = get_email_credentials()
@@ -201,22 +266,30 @@ class EmailSender:
         print(f"  收件人: {', '.join(receivers)}")
         print(f"  SMTP: {smtp_host}:{smtp_port}")
         
-        yag = None
-        try:
-            yag = yagmail.SMTP(user=user, password=password, host=smtp_host, port=smtp_port)
-            yag.send(
-                to=receivers,
-                subject=subject,
-                contents=[html_content]
-            )
-            print(f"  ✅ 邮件发送成功！共 {len(receivers)} 个收件人")
-            return True
-        except Exception as e:
-            print(f"  ❌ 邮件发送失败: {e}")
-            return False
-        finally:
-            if yag:
-                try:
-                    yag.close()
-                except Exception:
-                    pass
+        # 预检测 SMTP 连通性
+        reachable, err_msg = self._check_smtp_connectivity(smtp_host, smtp_port)
+        if not reachable:
+            print(f"  ⚠️  SMTP 预检测失败: {err_msg}")
+            print("  ⏳ 仍将尝试发送（预检失败不一定代表发送失败）...")
+        else:
+            print(f"  ✅ SMTP 预检测通过")
+        
+        # 带指数退避的重试发送
+        last_error = None
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                if attempt > 1:
+                    delay = RETRY_BASE_DELAY * (2 ** (attempt - 2))
+                    print(f"  ⏳ 第 {attempt}/{MAX_RETRIES} 次重试，等待 {delay} 秒...")
+                    time.sleep(delay)
+                
+                success = self._send_once(user, password, smtp_host, smtp_port, receivers, subject, html_content)
+                if success:
+                    print(f"  ✅ 邮件发送成功！共 {len(receivers)} 个收件人")
+                    return True
+            except Exception as e:
+                last_error = e
+                print(f"  ❌ 第 {attempt}/{MAX_RETRIES} 次发送失败: {e}")
+        
+        print(f"  ❌ 邮件发送最终失败（已重试 {MAX_RETRIES} 次）: {last_error}")
+        return False

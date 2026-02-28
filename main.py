@@ -122,9 +122,10 @@ def main():
             print("=" * 60)
         else:
             print("\n" + "=" * 60)
-            print("❌ 邮件发送失败！")
+            print("⚠️  邮件发送失败，但新闻内容已输出到上方控制台")
+            print("   可能原因: 网络不可达、SMTP 服务器限制、凭证错误等")
+            print("   提示: 新闻抓取和 AI 总结已成功完成，仅邮件投递环节失败")
             print("=" * 60)
-            raise SystemExit(1)
     else:
         print("\n⏭️  未配置邮件凭证（EMAIL_USER/EMAIL_PASSWORD/EMAIL_RECEIVER），跳过邮件发送")
         print("✅ 任务完成！（仅控制台输出）")
