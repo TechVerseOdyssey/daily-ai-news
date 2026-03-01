@@ -49,6 +49,13 @@ def sanitize_ai_html(html_content):
     
     html_content = re.sub(r'<(/?\s*\w+)[^>]*/?>', replace_tag, html_content)
     
+    # 清理标签内的多余换行：移除开标签后和闭标签前的空白行
+    # 解决 AI 输出 <li>\n\n内容 这类导致渲染出空行的问题
+    html_content = re.sub(r'(<(?:li|ul|ol|h3|h4|p|div|b|strong)[^>]*>)\s*\n+\s*', r'\1', html_content)
+    html_content = re.sub(r'\s*\n+\s*(</(?:li|ul|ol|h3|h4|p|div|b|strong)>)', r'\1', html_content)
+    # 清理连续的多余空行（2个以上换行合并为1个）
+    html_content = re.sub(r'\n{3,}', '\n', html_content)
+    
     return html_content
 
 
